@@ -2,21 +2,25 @@ import torch
 import joblib
 import numpy as np
 import random
+import os
+from pathlib import Path
 
 from transformers import ViTForImageClassification
 from torchvision import transforms
 from PIL import Image
 from ml.risk.risk_engine import get_risk_assessment
 
-# Paths
-XGB_MODEL_PATH = "ml/models/xgboost_eurosat.pkl"
-LABEL_ENCODER_PATH = "ml/models/label_encoder.pkl"
-RESNET_MODEL_PATH = "ml/models/resnet_eurosat.pth"
-VIT_MODEL_PATH = "ml/models/vit_eurosat.pth"
+
+ML_DIR = Path(__file__).resolve().parent.parent
+
+
+XGB_MODEL_PATH = ML_DIR / "models" / "xgboost_eurosat.pkl"
+LABEL_ENCODER_PATH = ML_DIR / "models" / "label_encoder.pkl"
+RESNET_MODEL_PATH = ML_DIR / "models" / "resnet_eurosat.pth"
+VIT_MODEL_PATH = ML_DIR / "models" / "vit_eurosat.pth"
 
 IMAGE_SIZE_RESNET = 224
 IMAGE_SIZE_VIT = 224
-
 
 # ---------- Load Models ----------
 
@@ -37,7 +41,6 @@ num_features = resnet.fc.in_features
 resnet.fc = nn.Linear(num_features, len(label_encoder.classes_))
 
 resnet.load_state_dict(torch.load(RESNET_MODEL_PATH, map_location="cpu"))
-
 resnet.eval()
 
 print("Loading ViT model...")
@@ -50,7 +53,6 @@ vit = ViTForImageClassification.from_pretrained(
 vit.load_state_dict(torch.load(VIT_MODEL_PATH, map_location="cpu"))
 vit.eval()
 
-
 # ---------- Image Transform ----------
 
 transform = transforms.Compose([
@@ -58,8 +60,7 @@ transform = transforms.Compose([
     transforms.ToTensor(),
 ])
 
-
-# ---------- Feature Extraction (same as earlier) ----------
+# ---------- Feature Extraction ----------
 
 def extract_features(image):
 
@@ -85,17 +86,14 @@ def extract_features(image):
         texture_energy
     ]).reshape(1, -1)
 
-
 # ---------- Individual Predictions ----------
 
 def predict_xgboost(image):
 
     features = extract_features(image)
-
     pred = xgb_model.predict(features)
 
     return label_encoder.inverse_transform(pred)[0]
-
 
 def predict_resnet(image):
 
@@ -108,7 +106,6 @@ def predict_resnet(image):
 
     return label_encoder.classes_[pred]
 
-
 def predict_vit(image):
 
     img = transform(image).unsqueeze(0)
@@ -119,7 +116,6 @@ def predict_vit(image):
     pred = torch.argmax(outputs.logits, dim=1).item()
 
     return label_encoder.classes_[pred]
-
 
 # ---------- Ensemble Voting ----------
 
@@ -144,14 +140,12 @@ def ensemble_predict(image_path):
     risk_info = get_risk_assessment(final_prediction)
 
     print("\nClimate Risk Assessment")
-
     print("Land Class:", risk_info["land_class"])
     print("Risk Level:", risk_info["risk_level"])
     print("Risk Type:", risk_info["risk_type"])
     print("Explanation:", risk_info["description"])
 
-
-    return final_prediction
+    return risk_info
 
 # ---------- Test Run ----------
 

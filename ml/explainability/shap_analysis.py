@@ -12,7 +12,7 @@ def main():
     print("Loading XGBoost model...")
     model = joblib.load(MODEL_PATH)
 
-    # Example image
+
     image_path = "ml/data/raw/eurosat/EuroSAT/SeaLake/SeaLake_1.jpg"
 
     print("Extracting features...")
@@ -20,7 +20,7 @@ def main():
     features = np.array(features).reshape(1, -1)
 
     # ---- SHAP Fix ----
-    # create a small background dataset
+    
     background = np.random.normal(size=(50, features.shape[1]))
 
     print("Initializing SHAP explainer...")
@@ -40,7 +40,7 @@ def main():
     ]
 
     print("\nFeature Contributions:")
-    # get predicted class
+    
     pred_class = model.predict(features)[0]
 
     print("\nPredicted class index:", pred_class)

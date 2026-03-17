@@ -2,6 +2,11 @@ from fastapi import APIRouter, UploadFile, File, HTTPException, Depends
 from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 from pathlib import Path
+from ml.ensemble.combine_models import ensemble_predict
+from app.schemas.image import RiskAssessmentResponse
+from app.services.tasks import analyze_image_task
+from celery.result import AsyncResult
+from app.core.celery_app import celery_app
 from PIL import Image as PILImage
 import io
 
@@ -17,7 +22,7 @@ from app.services.image_service import (
 router = APIRouter(prefix="/images")
 
 ALLOWED_TYPES = {"image/jpeg", "image/png"}
-MAX_FILE_SIZE = 5 * 1024 * 1024  # 5 MB
+MAX_FILE_SIZE = 5 * 1024 * 1024 
 
 
 @router.post("/upload", response_model=ImageResponse)
@@ -114,3 +119,66 @@ def similar_images(
         }
         for r in results
     ]
+
+@router.get("/{image_id}/analyze", response_model=RiskAssessmentResponse)
+def analyze_image_risk(
+    image_id: int,
+    db: Session = Depends(get_db)
+):
+
+    image = get_image_by_id(db, image_id)
+    
+    if not image:
+        raise HTTPException(status_code=404, detail="Image not found")
+        
+    file_path = Path(image.file_path)
+    
+    if not file_path.exists():
+        raise HTTPException(status_code=404, detail="Image file missing on disk")
+        
+    
+    try:
+        
+        risk_info = ensemble_predict(str(file_path))
+    except Exception as e:
+        raise HTTPException(
+            status_code=500, 
+            detail=f"ML Pipeline failed: {str(e)}"
+        )
+        
+
+    return risk_info
+
+@router.post("/{image_id}/analyze-async")
+def trigger_async_analysis(
+    image_id: int,
+    db: Session = Depends(get_db)
+):
+    image = get_image_by_id(db, image_id)
+    
+    if not image:
+        raise HTTPException(status_code=404, detail="Image not found")
+        
+    file_path = Path(image.file_path)
+    
+    if not file_path.exists():
+        raise HTTPException(status_code=404, detail="Image file missing on disk")
+        
+    # Dispatch the task to Celery
+    task = analyze_image_task.delay(str(file_path))
+    
+    return {"task_id": task.id, "status": "Processing in background"}
+
+
+@router.get("/tasks/{task_id}")
+def get_task_status(task_id: str):
+    task_result = AsyncResult(task_id, app=celery_app)
+    
+    if task_result.state == 'PENDING':
+        return {"status": "Pending", "details": "Task is waiting in queue"}
+    elif task_result.state == 'SUCCESS':
+        return {"status": "Completed", "result": task_result.result}
+    elif task_result.state == 'FAILURE':
+        return {"status": "Failed", "details": str(task_result.info)}
+    else:
+        return {"status": task_result.state}

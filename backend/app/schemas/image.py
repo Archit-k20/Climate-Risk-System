@@ -9,3 +9,9 @@ class ImageResponse(BaseModel):
 
     class Config:
         orm_mode = True
+
+class RiskAssessmentResponse(BaseModel):
+    land_class: str
+    risk_level: str
+    risk_type: str
+    description: str

@@ -23,7 +23,7 @@ def get_dataloaders(data_dir, batch_size=64):
     train_size = int(0.8 * len(dataset))
     test_size = len(dataset) - train_size
 
-    # FIX: deterministic split
+    
     generator = torch.Generator().manual_seed(42)
 
     train_dataset, test_dataset = torch.utils.data.random_split(
