@@ -6,6 +6,7 @@ import random
 from transformers import ViTForImageClassification
 from torchvision import transforms
 from PIL import Image
+from ml.risk.risk_engine import get_risk_assessment
 
 # Paths
 XGB_MODEL_PATH = "ml/models/xgboost_eurosat.pkl"
@@ -140,13 +141,22 @@ def ensemble_predict(image_path):
 
     print("\nFinal Ensemble Prediction:", final_prediction)
 
-    return final_prediction
+    risk_info = get_risk_assessment(final_prediction)
 
+    print("\nClimate Risk Assessment")
+
+    print("Land Class:", risk_info["land_class"])
+    print("Risk Level:", risk_info["risk_level"])
+    print("Risk Type:", risk_info["risk_type"])
+    print("Explanation:", risk_info["description"])
+
+
+    return final_prediction
 
 # ---------- Test Run ----------
 
 if __name__ == "__main__":
     for i in range(8):
         count = random.choice(range(1, 100))
-        test_image = f"ml/data/raw/eurosat/EuroSAT/Highway/Highway_{count}.jpg"
+        test_image = f"ml/data/raw/eurosat/EuroSAT/River/River_{count}.jpg"
         ensemble_predict(test_image)
