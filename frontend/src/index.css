@@ -1,0 +1,238 @@
+@import "tailwindcss";
+
+/* ─── Custom Climate Color Tokens ─────────────────────────────────────────── */
+:root {
+  --background: 222 47% 6%;
+  --foreground: 210 40% 96%;
+
+  --card: 222 47% 9%;
+  --card-foreground: 210 40% 96%;
+
+  --border: 217 33% 18%;
+  --input: 217 33% 18%;
+
+  --primary: 38 92% 55%;        /* Amber — risk accent */
+  --primary-foreground: 222 47% 6%;
+
+  --secondary: 162 72% 40%;     /* Emerald — safe zones */
+  --secondary-foreground: 210 40% 96%;
+
+  --destructive: 0 72% 51%;     /* Red — high risk */
+  --destructive-foreground: 210 40% 96%;
+
+  --muted: 217 33% 14%;
+  --muted-foreground: 215 20% 55%;
+
+  --accent: 199 89% 48%;        /* Teal — interactive accent */
+  --accent-foreground: 210 40% 96%;
+
+  --ring: 38 92% 55%;
+
+  /* Direct CSS custom properties for use in non-Tailwind contexts */
+  --color-bg-base: #090e1a;
+  --color-bg-card: #0d1424;
+  --color-amber: #f59e0b;
+  --color-emerald: #10b981;
+  --color-teal: #06b6d4;
+  --color-red: #ef4444;
+  --color-border: #1e2d45;
+  --color-muted: #4a5568;
+}
+
+/* ─── Light Theme Variables ────────────────────────────────────────────────── */
+/* When data-theme="light" is set on <html>, these values override the
+   dark defaults defined in :root above. Every component using var(--color-*)
+   automatically picks up the new values — no component code changes needed.
+   This is the power of building on CSS custom properties from day one. */
+
+[data-theme="light"] {
+  --background: 210 40% 96%;
+  --foreground: 222 47% 11%;
+  --card: 0 0% 100%;
+  --card-foreground: 222 47% 11%;
+  --border: 214 32% 85%;
+  --muted: 210 40% 93%;
+  --muted-foreground: 215 16% 47%;
+  --color-bg-base: #f0f4f8;
+  --color-bg-card: #ffffff;
+  --color-border: #d1dbe8;
+  --color-muted: #8896a5;
+  /* Keep the accent colors the same — amber, emerald, teal, red
+     all work equally well on both dark and light backgrounds */
+}
+
+/* Scrollbar also needs to adapt for light mode */
+[data-theme="light"] ::-webkit-scrollbar-track {
+  background: #f0f4f8;
+}
+[data-theme="light"] ::-webkit-scrollbar-thumb {
+  background: #d1dbe8;
+}
+
+/* ─── Base Styles ──────────────────────────────────────────────────────────── */
+* {
+  border-color: hsl(var(--border));
+  box-sizing: border-box;
+}
+
+body {
+  background-color: var(--color-bg-base);
+  color: hsl(var(--foreground));
+  font-family: 'IBM Plex Mono', 'Courier New', monospace;
+  -webkit-font-smoothing: antialiased;
+}
+
+h1, h2, h3, h4, h5, h6 {
+  font-family: 'Syne', 'Inter', sans-serif;
+}
+
+/* ─── Scrollbar Styling ────────────────────────────────────────────────────── */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: var(--color-bg-base);
+}
+::-webkit-scrollbar-thumb {
+  background: var(--color-border);
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--color-muted);
+}
+
+/* ─── Glassmorphism Utility ────────────────────────────────────────────────── */
+.glass {
+  background: rgba(13, 20, 36, 0.7);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(30, 45, 69, 0.6);
+}
+
+/* ─── Pulsing Risk Marker Animation ───────────────────────────────────────── */
+@keyframes risk-pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.6; transform: scale(1.15); }
+}
+.risk-pulse {
+  animation: risk-pulse 2s ease-in-out infinite;
+}
+
+/* ─── Shimmer skeleton animation ──────────────────────────────────────────── */
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+.skeleton {
+  background: linear-gradient(90deg, #1e2d45 25%, #253450 50%, #1e2d45 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.5s infinite;
+  border-radius: 4px;
+}
+/* ─── Leaflet Dark Theme Overrides ────────────────────────────────────────── */
+.leaflet-container {
+  background: var(--color-bg-base);
+  font-family: 'IBM Plex Mono', monospace;
+}
+
+/* Remove Leaflet's default popup white background */
+.leaflet-popup-content-wrapper {
+  background: var(--color-bg-card);
+  border: 1px solid var(--color-border);
+  border-radius: 12px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+  color: hsl(var(--foreground));
+}
+
+.leaflet-popup-tip {
+  background: var(--color-bg-card);
+}
+
+.leaflet-popup-close-button {
+  color: var(--color-muted) !important;
+}
+
+/* Hide Leaflet's default attribution (we'll add our own) */
+.leaflet-control-attribution {
+  display: none;
+}
+
+/* Style the zoom controls to match our theme */
+.leaflet-control-zoom a {
+  background: var(--color-bg-card) !important;
+  color: hsl(var(--foreground)) !important;
+  border-color: var(--color-border) !important;
+}
+
+.leaflet-control-zoom a:hover {
+  background: var(--color-border) !important;
+}
+
+/* ─── Range Slider Thumb Styling ───────────────────────────────────────────── */
+/* The thumb is the draggable circle. We style it separately for
+   Webkit browsers (Chrome, Safari) and Firefox because they use
+   different pseudo-element selectors. */
+
+input[type='range']::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--color-amber);
+  border: 2px solid var(--color-bg-base);
+  cursor: pointer;
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+input[type='range']::-webkit-slider-thumb:hover {
+  transform: scale(1.2);
+  box-shadow: 0 0 0 4px rgba(245, 158, 11, 0.2);
+}
+
+input[type='range']::-moz-range-thumb {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--color-amber);
+  border: 2px solid var(--color-bg-base);
+  cursor: pointer;
+}
+
+/* ─── Mobile Responsive Fixes ─────────────────────────────────────────────── */
+
+/* On mobile screens, collapse the sidebar completely and
+   let the main content use the full width */
+@media (max-width: 640px) {
+  /* Hide the full sidebar on mobile */
+  aside {
+    display: none !important;
+  }
+
+  /* Main content takes full width on mobile */
+  main {
+    margin-left: 0 !important;
+  }
+
+  /* Reduce padding on mobile to maximize content space */
+  main > div {
+    padding: 1rem !important;
+  }
+
+  /* Stack the top navbar items on very small screens */
+  header .hidden {
+    display: none;
+  }
+}
+
+/* Tablet: show icon-only sidebar */
+@media (min-width: 641px) and (max-width: 1024px) {
+  /* Force sidebar to collapsed/icon-only mode on tablet */
+  aside {
+    width: 64px !important;
+  }
+
+  main {
+    margin-left: 64px !important;
+  }
+}
