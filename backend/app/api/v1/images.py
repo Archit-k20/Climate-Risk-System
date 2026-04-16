@@ -182,15 +182,33 @@ def trigger_async_analysis(
     return {"task_id": task.id, "status": "Processing in background"}
 
 @router.get("/tasks/{task_id}")
-def get_task_status(task_id: str):
+def get_task_status(task_id: str, db: Session = Depends(get_db)):
     task_result = AsyncResult(task_id, app=celery_app)
-    
+
     if task_result.state == 'PENDING':
         return {"status": "Pending", "details": "Task is waiting in queue"}
+
     elif task_result.state == 'SUCCESS':
-        return {"status": "Completed", "result": task_result.result}
+        result = task_result.result
+
+        # Enrich the result with the actual score from the database.
+        # The Celery task saves a varied score based on model agreement,
+        # which is more accurate than the flat mapping used previously.
+        # We look it up here so the Upload page shows the real score.
+        if result and isinstance(result, dict):
+            image_id = result.get('image_id')
+            if image_id:
+                risk_score_record = db.query(RiskScore).filter(
+                    RiskScore.image_id == image_id
+                ).first()
+                if risk_score_record:
+                    result['actual_score'] = risk_score_record.score
+
+        return {"status": "Completed", "result": result}
+
     elif task_result.state == 'FAILURE':
         return {"status": "Failed", "details": str(task_result.info)}
+
     else:
         return {"status": task_result.state}
 

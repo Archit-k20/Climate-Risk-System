@@ -120,29 +120,41 @@ def predict_vit(image):
 # ---------- Ensemble Voting ----------
 
 def ensemble_predict(image_path):
-
     image = Image.open(image_path).convert("RGB")
 
-    pred_xgb = predict_xgboost(image)
+    pred_xgb    = predict_xgboost(image)
     pred_resnet = predict_resnet(image)
-    pred_vit = predict_vit(image)
+    pred_vit    = predict_vit(image)
 
     print("XGBoost prediction:", pred_xgb)
-    print("ResNet prediction:", pred_resnet)
-    print("ViT prediction:", pred_vit)
+    print("ResNet prediction:",  pred_resnet)
+    print("ViT prediction:",     pred_vit)
 
-    votes = [pred_xgb, pred_resnet, pred_vit]
-
+    votes          = [pred_xgb, pred_resnet, pred_vit]
     final_prediction = max(set(votes), key=votes.count)
 
+    # Count how many models agreed on the final prediction
+    agreement_count = votes.count(final_prediction)
+
+    # agreement_count = 3 means unanimous (high confidence)
+    # agreement_count = 2 means majority (medium confidence)
+    # agreement_count = 1 is impossible with 3 models + majority voting
+    confidence = 'unanimous' if agreement_count == 3 else 'majority'
+
     print("\nFinal Ensemble Prediction:", final_prediction)
+    print("Model agreement:", agreement_count, "/3")
 
     risk_info = get_risk_assessment(final_prediction)
 
+    # Add confidence info to the result so the task can use it
+    risk_info['model_agreement'] = agreement_count
+    risk_info['confidence']      = confidence
+
     print("\nClimate Risk Assessment")
-    print("Land Class:", risk_info["land_class"])
-    print("Risk Level:", risk_info["risk_level"])
-    print("Risk Type:", risk_info["risk_type"])
+    print("Land Class:",  risk_info["land_class"])
+    print("Risk Level:",  risk_info["risk_level"])
+    print("Risk Type:",   risk_info["risk_type"])
+    print("Agreement:",   f"{agreement_count}/3 models")
     print("Explanation:", risk_info["description"])
 
     return risk_info

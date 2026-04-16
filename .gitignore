@@ -125,10 +125,7 @@ Thumbs.db
 docker-compose.override.yml
 
 # ML specific
-*.pth
-*.pt
 checkpoints/
-models/
 data/raw/
 data/processed/
 uploads/
