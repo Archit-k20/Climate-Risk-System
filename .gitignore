@@ -1,0 +1,209 @@
+# ============================================================
+# Climate Risk System — .gitignore
+# Stack: Python (FastAPI/Celery/SQLAlchemy) · React/Vite/TS · PyTorch ML
+# ============================================================
+
+# ──────────────────────────────────────────
+# Python
+# ──────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.pyd
+
+# Distribution / packaging
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+wheels/
+sdist/
+var/
+
+# Virtual environments
+.venv/
+venv/
+env/
+ENV/
+env.bak/
+venv.bak/
+backend/venv/
+
+# PyInstaller
+*.manifest
+*.spec
+
+# Unit test / coverage
+htmlcov/
+.tox/
+.nox/
+.coverage
+.coverage.*
+.cache/
+nosetests.xml
+coverage.xml
+*.cover
+.hypothesis/
+.pytest_cache/
+
+# Type checkers
+.mypy_cache/
+.dmypy.json
+dmypy.json
+.pyre/
+
+# pyenv
+.python-version
+
+# Celery
+celerybeat-schedule
+celerybeat.pid
+
+# Alembic — keep migrations in source control, ignore auto-generated env caches
+# (add specific exclusions here if needed)
+
+# Jupyter / IPython
+.ipynb_checkpoints/
+profile_default/
+ipython_config.py
+
+# Translations
+*.mo
+*.pot
+
+# Sphinx
+docs/_build/
+
+# PyBuilder
+target/
+
+# ──────────────────────────────────────────
+# Environment / Secrets
+# ──────────────────────────────────────────
+.env
+.env.*
+!.env.example
+*.env
+local_settings.py
+
+# ──────────────────────────────────────────
+# Backend — FastAPI / uploads / DB
+# ──────────────────────────────────────────
+backend/.env
+backend/uploads/
+uploads/
+instance/
+*.db
+*.sqlite3
+db.sqlite3
+
+# ReportLab / WeasyPrint generated PDFs (runtime artefacts)
+*.pdf
+
+# ──────────────────────────────────────────
+# ML — Models, Data, Checkpoints
+# ──────────────────────────────────────────
+# Checkpoints directory (ephemeral training saves)
+checkpoints/
+ml/checkpoints/
+
+# Raw & processed datasets (can be large/proprietary)
+ml/data/raw/
+ml/data/processed/
+data/raw/
+data/processed/
+
+# HuggingFace cache
+.cache/huggingface/
+~/.cache/huggingface/
+
+# ──────────────────────────────────────────
+# Frontend — Node / Vite / React / TypeScript
+# ──────────────────────────────────────────
+node_modules/
+frontend/node_modules/
+
+# Build output
+dist/
+dist-ssr/
+frontend/dist/
+
+# Vite cache
+.vite/
+frontend/.vite/
+
+# TypeScript build info
+*.tsbuildinfo
+
+# Local env files created by Vite
+*.local
+
+# ──────────────────────────────────────────
+# Logs
+# ──────────────────────────────────────────
+*.log
+logs/
+pip-log.txt
+pip-delete-this-directory.txt
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+# ──────────────────────────────────────────
+# Docker
+# ──────────────────────────────────────────
+docker-compose.override.yml
+
+# ──────────────────────────────────────────
+# IDEs & Editors
+# ──────────────────────────────────────────
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+*.swp
+*.swx
+.project
+.classpath
+.settings/
+*.iml
+
+# Rope / Spyder
+.ropeproject
+.spyderproject
+.spyproject
+
+# ──────────────────────────────────────────
+# OS
+# ──────────────────────────────────────────
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+desktop.ini
+
+# ──────────────────────────────────────────
+# Temporary files
+# ──────────────────────────────────────────
+*.tmp
+*.temp
+*.bak
+*.orig

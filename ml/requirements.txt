@@ -1,0 +1,13 @@
+torch
+torchvision
+transformers
+scikit-learn
+xgboost
+opencv-python
+pandas
+numpy
+pillow
+scikit-image
+matplotlib
+shap
+tqdm
