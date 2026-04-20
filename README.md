@@ -47,7 +47,7 @@ The **Climate Risk Intelligence System** is a full-stack, production-ready platf
 
 At its core, the system leverages:
 
-- **Vision Transformer (ViT-Base-Patch16)** models trained on EuroSAT satellite imagery for land classification
+- **Ensemble ML Pipeline** — Vision Transformer (ViT-Base-Patch16), ResNet feature extraction, and XGBoost classifier trained on EuroSAT satellite imagery for land classification and risk prediction
 - **Google Gemini LLM / LangChain agents** for contextual risk evaluation and narrative report generation
 - **Interactive geospatial mapping** with real-time risk zone visualization (Leaflet.js)
 - **Climate simulation engine** for scenario modeling and agricultural impact forecasting
@@ -113,7 +113,7 @@ This system enables analysts, researchers, and organizations to make data-driven
 | Feature | Description |
 |---------|-------------|
 | **Satellite Image Analysis** | Upload EuroSAT-compatible satellite or drone imagery (JPG, PNG, TIFF, up to 50 MB) |
-| **ViT Classification** | Vision Transformer (ViT-Base-Patch16) classifies land types: drought, flood, wildfire, deforestation, erosion, pollution |
+| **Ensemble Classification** | Vision Transformer (ViT-Base-Patch16), ResNet feature extraction, and XGBoost ensemble classifies land types: drought, flood, wildfire, deforestation, erosion, pollution |
 | **LLM Risk Assessment** | Google Gemini 1.5 Flash / Pro generates nuanced, human-readable risk reports with mitigation recommendations |
 | **Geospatial Mapping** | Leaflet.js interactive map with colour-coded risk zone markers and filters |
 | **Climate Simulation** | Parameter sliders (rainfall, temp, humidity, soil) produce projected crop yield curves and a risk impact matrix |
@@ -172,10 +172,16 @@ This system enables analysts, researchers, and organizations to make data-driven
 
 ┌─────────────────────────────────────────────────────────────────┐
 │                    ML PIPELINE  (Python)                        │
-│  ┌────────────────┐  ┌──────────────┐  ┌────────────────────┐  │
-│  │ ViT-Base-P16   │  │ ResNet Feature│  │ Risk Mapper &      │  │
-│  │ (EuroSAT-ft.)  │  │ Extractor     │  │ SHAP Explainability│  │
-│  └────────────────┘  └──────────────┘  └────────────────────┘  │
+│  ┌────────────────┐  ┌──────────────┐  ┌──────────────────┐    │
+│  │ ViT-Base-P16   │  │ ResNet       │  │ XGBoost Ensemble │    │
+│  │ (EuroSAT-ft.)  │  │ Feature      │  │ Classifier       │    │
+│  │                │  │ Extractor    │  │                  │    │
+│  └─────────┬──────┘  └──────┬───────┘  └────────┬─────────┘    │
+│            └──────────────────┼─────────────────┘               │
+│                               │                                 │
+│            ┌──────────────────▼──────────────────┐              │
+│            │ Risk Mapper & SHAP Explainability  │              │
+│            └───────────────────────────────────┘              │
 └─────────────────────────────────────────────────────────────────┘
 ```
 
@@ -225,7 +231,8 @@ This system enables analysts, researchers, and organizations to make data-driven
 | Library | Purpose |
 |---------|---------|
 | Vision Transformer (ViT-Base-Patch16) | Satellite image feature extraction & classification |
-| ResNet-50 | Alternative feature extraction backbone |
+| ResNet-50 | Feature extraction backbone |
+| XGBoost | Ensemble classifier for risk prediction |
 | Sentence Transformers | Semantic embeddings for vector search |
 | SHAP | Model explainability |
 | Scikit-learn | ML utilities |
