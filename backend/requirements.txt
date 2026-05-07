@@ -2,6 +2,9 @@ fastapi
 uvicorn
 sqlalchemy
 psycopg2-binary
+python-socketio
+python-engineio
+celery
 alembic
 python-multipart
 pillow

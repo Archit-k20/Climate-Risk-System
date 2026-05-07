@@ -1,9 +1,7 @@
 import sys
 from pathlib import Path
-import eventlet
 import random
 
-eventlet.monkey_patch()
 
 root_path = Path(__file__).resolve().parent.parent.parent.parent
 sys.path.append(str(root_path))

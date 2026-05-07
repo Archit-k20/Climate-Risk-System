@@ -12,6 +12,8 @@ export interface LiveActivityEntry {
   filename: string
   riskType: string
   confidence: number
+  score: number          // actual risk score (0-100)
+  landClass: string      // e.g. "Forest", "Highway"
   riskLevel: 'low' | 'medium' | 'high'
   timestamp: Date
   isLive: boolean
@@ -129,7 +131,7 @@ addLiveActivityEntry: (entry) =>
 
   mapFilters: {
     riskLevels: ['low', 'medium', 'high'],
-    riskTypes: ['Drought', 'Flood', 'Wildfire', 'Deforestation', 'Erosion'],
+    riskTypes: ['Drought', 'Flood', 'Wildfire', 'Deforestation', 'Erosion', 'Pollution Risk'],
   },
   setMapFilters: (filters) =>
     set((state) => ({

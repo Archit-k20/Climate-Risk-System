@@ -3,7 +3,7 @@ import { AnalysisResult } from '@/types/analysis'
 import { RiskScoreGauge } from './RiskScoreGauge'
 import { RiskTypeBreakdown } from './RiskTypeBreakdown'
 import { MitigationReportCard } from './MitigationReportCard'
-import { CheckCircle2, Clock } from 'lucide-react'
+import { CheckCircle2 } from 'lucide-react'
 
 interface AnalysisResultsPanelProps {
   result: AnalysisResult
@@ -37,12 +37,7 @@ export function AnalysisResultsPanel({ result }: AnalysisResultsPanelProps) {
             {result.filename} — processed successfully
           </p>
         </div>
-        <div className="ml-auto flex items-center gap-1">
-          <Clock size={12} style={{ color: 'var(--color-muted)' }} />
-          <span className="text-xs" style={{ color: 'var(--color-muted)', fontFamily: 'IBM Plex Mono, monospace' }}>
-            {new Date(result.analyzed_at).toLocaleTimeString()}
-          </span>
-        </div>
+
       </div>
 
       {/* ── Top Row: Gauge + Breakdown ── */}

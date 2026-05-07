@@ -3,7 +3,7 @@ import { Filter, X } from 'lucide-react'
 import { useAppStore } from '@/store/useAppStore'
 
 const RISK_LEVELS = ['low', 'medium', 'high'] as const
-const RISK_TYPES  = ['Drought', 'Flood', 'Wildfire', 'Deforestation', 'Erosion'] as const
+const RISK_TYPES  = ['Drought', 'Flood', 'Wildfire', 'Deforestation', 'Erosion', 'Pollution Risk'] as const
 
 const LEVEL_COLORS = {
   low:    '#10b981',
@@ -12,11 +12,12 @@ const LEVEL_COLORS = {
 }
 
 const TYPE_COLORS: Record<string, string> = {
-  Drought:       '#f59e0b',
-  Flood:         '#06b6d4',
-  Wildfire:      '#ef4444',
-  Deforestation: '#10b981',
-  Erosion:       '#a78bfa',
+  Drought:          '#f59e0b',
+  Flood:            '#06b6d4',
+  Wildfire:         '#ef4444',
+  Deforestation:    '#10b981',
+  Erosion:          '#a78bfa',
+  'Pollution Risk': '#fb923c',
 }
 
 export function MapFilterPanel() {
@@ -44,12 +45,12 @@ export function MapFilterPanel() {
   const resetFilters = () => {
     setMapFilters({
       riskLevels: ['low', 'medium', 'high'],
-      riskTypes:  ['Drought', 'Flood', 'Wildfire', 'Deforestation', 'Erosion'],
+      riskTypes:  ['Drought', 'Flood', 'Wildfire', 'Deforestation', 'Erosion', 'Pollution Risk'],
     })
   }
 
   const isFiltered =
-    mapFilters.riskLevels.length < 3 || mapFilters.riskTypes.length < 5
+    mapFilters.riskLevels.length < 3 || mapFilters.riskTypes.length < 6
 
   return (
     <motion.div

@@ -1,4 +1,5 @@
-import { LayoutDashboard, AlertTriangle, BarChart3, FileCheck, Zap } from 'lucide-react'
+import { ElementType } from 'react'
+import { LayoutDashboard, AlertTriangle, BarChart3, FileCheck, Zap, Globe, Thermometer, Wind } from 'lucide-react'
 import { PageTransition } from '@/components/layout/PageTransition'
 import { KPICard } from '@/components/dashboard/KPICard'
 import { RiskDistributionChart } from '@/components/dashboard/RiskDistributionChart'
@@ -18,7 +19,6 @@ function SimulateLiveEventButton() {
 
   const RISK_TYPES  = ['Drought', 'Flood', 'Wildfire', 'Deforestation', 'Erosion']
   const RISK_LEVELS = ['low', 'medium', 'high'] as const
-  const REGIONS     = ['Sahel, Sudan', 'Amazon Basin', 'California, USA', 'Ganges Delta', 'Central Australia']
   const FILENAMES   = ['sahel_survey_new.jpg', 'amazon_patch_08.jpg', 'sierra_scan_04.jpg', 'delta_image_03.jpg']
 
   const fireEvent = () => {
@@ -32,7 +32,6 @@ function SimulateLiveEventButton() {
       risk_level:  riskLevel,
       risk_type:   RISK_TYPES[Math.floor(Math.random() * RISK_TYPES.length)],
       confidence:  65 + Math.floor(Math.random() * 30),
-      region:      REGIONS[Math.floor(Math.random() * REGIONS.length)],
       analyzed_at: new Date().toISOString(),
     })
   }
@@ -40,32 +39,52 @@ function SimulateLiveEventButton() {
   return (
     <button
       onClick={fireEvent}
-      className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium transition-all hover:opacity-90 active:scale-95"
+      className="flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-medium transition-all hover:opacity-90 active:scale-95"
       style={{
-        background: 'rgba(245,158,11,0.15)',
-        border: '1px solid rgba(245,158,11,0.4)',
+        background: 'rgba(245,158,11,0.1)',
+        border: '1px solid rgba(245,158,11,0.3)',
         color: 'var(--color-amber)',
         fontFamily: 'IBM Plex Mono, monospace',
       }}
     >
-      <Zap size={14} />
-      Simulate Live Event
+      <Zap size={12} />
+      Simulate Event
     </button>
+  )
+}
+
+// ── Climate Stat Pill ─────────────────────────────────────────────────────────
+function ClimatePill({ icon: Icon, label, value, color }: {
+  icon: ElementType
+  label: string
+  value: string
+  color: string
+}) {
+  return (
+    <div
+      className="flex items-center gap-2 px-3 py-1.5 rounded-full"
+      style={{ background: `${color}12`, border: `1px solid ${color}25` }}
+    >
+      <Icon size={11} style={{ color }} />
+      <span className="text-xs" style={{ color: 'hsl(var(--foreground) / 0.5)', fontFamily: 'IBM Plex Mono, monospace' }}>
+        {label}
+      </span>
+      <span className="text-xs font-bold" style={{ color, fontFamily: 'IBM Plex Mono, monospace' }}>
+        {value}
+      </span>
+    </div>
   )
 }
 
 // ── Dashboard Page ────────────────────────────────────────────────────────────
 export default function DashboardPage() {
-  // Fetch real stats from backend — falls back to mock data if offline
   const { stats, isLoading } = useDashboardStats()
-  
 
-  // KPI configuration now uses real data from the hook
   const KPI_CONFIGS = [
     {
-      title:          'Total Analyzed',
+      title:          'Images Analyzed',
       value:          stats.total_analyzed,
-      icon:           <LayoutDashboard size={16} />,
+      icon:           <LayoutDashboard size={15} />,
       sparklineData:  mockSparklines.totalAnalyzed,
       sparklineColor: 'var(--color-teal)',
       accentColor:    'var(--color-teal)',
@@ -73,7 +92,7 @@ export default function DashboardPage() {
     {
       title:          'High Risk Zones',
       value:          stats.active_high_risk_zones,
-      icon:           <AlertTriangle size={16} />,
+      icon:           <AlertTriangle size={15} />,
       sparklineData:  mockSparklines.activeHighRiskZones,
       sparklineColor: 'var(--color-red)',
       accentColor:    'var(--color-red)',
@@ -82,7 +101,7 @@ export default function DashboardPage() {
       title:          'Avg Risk Score',
       value:          stats.average_risk_score,
       suffix:         '%',
-      icon:           <BarChart3 size={16} />,
+      icon:           <BarChart3 size={15} />,
       sparklineData:  mockSparklines.averageRiskScore,
       sparklineColor: 'var(--color-amber)',
       accentColor:    'var(--color-amber)',
@@ -90,7 +109,7 @@ export default function DashboardPage() {
     {
       title:          'Reports Generated',
       value:          stats.reports_generated,
-      icon:           <FileCheck size={16} />,
+      icon:           <FileCheck size={15} />,
       sparklineData:  mockSparklines.reportsGenerated,
       sparklineColor: 'var(--color-emerald)',
       accentColor:    'var(--color-emerald)',
@@ -99,30 +118,46 @@ export default function DashboardPage() {
 
   return (
     <PageTransition>
-      {/* Page header */}
-      <div className="flex items-start justify-between mb-6">
+      {/* ── Page Header ───────────────────────────────────────────────────── */}
+      <div className="flex items-start justify-between mb-5">
         <div>
+          <div className="flex items-center gap-2 mb-1">
+            <Globe size={14} style={{ color: 'var(--color-teal)' }} />
+            <span
+              className="text-xs uppercase tracking-[0.15em]"
+              style={{ color: 'var(--color-teal)', fontFamily: 'IBM Plex Mono, monospace' }}
+            >
+              Climate Intelligence Platform
+            </span>
+          </div>
           <h2
-            className="text-2xl font-bold"
+            className="text-3xl font-black"
             style={{ fontFamily: 'Syne, sans-serif', color: 'hsl(var(--foreground))' }}
           >
-            Overview
+            Risk Overview
           </h2>
           <p
-            className="text-sm mt-1"
+            className="text-xs mt-1"
             style={{ color: 'var(--color-muted)', fontFamily: 'IBM Plex Mono, monospace' }}
           >
-            Real-time climate risk intelligence across all monitored regions
+            Real-time satellite analysis across all monitored regions
           </p>
         </div>
-        <SimulateLiveEventButton />
+
+        <div className="flex items-center gap-2 flex-wrap justify-end">
+          {/* Climate context pills */}
+          <ClimatePill icon={Thermometer} label="CO₂" value="+2.1°C" color="var(--color-amber)" />
+          <ClimatePill icon={Wind} label="Events" value="↑ 34%" color="var(--color-red)" />
+          <SimulateLiveEventButton />
+        </div>
       </div>
 
-      <LiveUpdateBanner />
+      {/* ── System Status ─────────────────────────────────────────────────── */}
       <SystemStatusBar />
+      <LiveUpdateBanner />
 
-      {/* KPI Cards — show skeletons while loading, real cards when ready */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4 mb-6">
+      {/* ── KPI Cards ─────────────────────────────────────────────────────── */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4 mb-5">
         {isLoading
           ? Array.from({ length: 4 }).map((_, i) => <KPICardSkeleton key={i} />)
           : KPI_CONFIGS.map((config, index) => (
@@ -131,17 +166,19 @@ export default function DashboardPage() {
         }
       </div>
 
-      {/* Bottom row */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-        <div className="lg:col-span-1">
+      {/* ── Bottom Row: Chart + Feed ───────────────────────────────────────── */}
+      <div className="grid grid-cols-1 lg:grid-cols-5 gap-4">
+        {/* Risk donut chart */}
+        <div className="lg:col-span-2">
           {isLoading
-            ? <SkeletonCard lines={4} height="320px" />
+            ? <SkeletonCard lines={4} height="360px" />
             : <RiskDistributionChart />
           }
         </div>
-        <div className="lg:col-span-2">
+        {/* Recent analysis feed */}
+        <div className="lg:col-span-3">
           {isLoading
-            ? <SkeletonCard lines={5} height="320px" />
+            ? <SkeletonCard lines={5} height="360px" />
             : <RecentActivityFeed />
           }
         </div>

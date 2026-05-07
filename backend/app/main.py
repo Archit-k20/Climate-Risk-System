@@ -1,8 +1,12 @@
 import sys
 from pathlib import Path
 
+# Add both the project root and backend directory to sys.path
+# so that 'app' and 'ml' packages can be imported
 root_path = Path(__file__).resolve().parent.parent.parent
-sys.path.append(str(root_path))
+backend_path = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(backend_path))
+sys.path.insert(0, str(root_path))
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware

@@ -70,20 +70,16 @@ export function useRecentAnalyses() {
     ;[...data].reverse().forEach((record) => {
       const riskLevel = normalizeRiskLevel(record.risk_level)
 
-      // Derive confidence from the actual score — images with higher scores
-      // are analyzed with higher "confidence" in the risk assessment.
-      // We map score 0-100 to confidence range 65-95 for realistic display.
       const scoreMap = { low: 22, medium: 55, high: 82 }
-      const score     = record.score ?? scoreMap[riskLevel]
-      const confidence = Math.round(65 + (score / 100) * 30)
+      const score = record.score ?? scoreMap[riskLevel]
 
       addLiveActivityEntry({
         id:         `backend-${record.id}`,
         filename:   record.filename,
-        // Use the actual risk type from the ML analysis result
         riskType:   extractRiskTypeLabel(record.risk_type),
-        confidence,
-        // Use the actual risk level from the ML analysis result
+        confidence: Math.round(65 + (score / 100) * 30), // kept for sidebar compat
+        score:      Math.round(score),
+        landClass:  record.land_class ?? 'Unknown',
         riskLevel,
         timestamp:  new Date(record.uploaded_at),
         isLive:     false,

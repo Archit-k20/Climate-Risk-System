@@ -4,7 +4,7 @@ import { PageTransition } from '@/components/layout/PageTransition'
 import { ReportsTable } from '@/components/reports/ReportsTable'
 import { ReportDetailSheet } from '@/components/reports/ReportDetailSheet'
 import { mockReports, ReportRecord } from '@/lib/mockData'
-import { exportReportToPDF } from '@/lib/pdfExport'
+import { exportReportToPDF } from '@/lib/pdfExports'
 import toast from 'react-hot-toast'
 import { useReports } from '@/hooks/useReports'
 

@@ -1,0 +1,7 @@
+{
+    "git.ignoreLimitWarning": true,
+    "python.analysis.extraPaths": [
+        "./ml/training/train_"
+    ],
+    "python-envs.defaultEnvManager": "ms-python.python:system"
+}

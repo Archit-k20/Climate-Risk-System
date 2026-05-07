@@ -17,10 +17,10 @@ const MAX_POLL_ATTEMPTS = 60
 // Used when the backend is offline. This lets you continue developing
 // the frontend even without the backend running.
 const MOCK_BACKEND_RESPONSE = {
-  land_class:    'SeaLake',
-  risk_level:    'Medium',
-  risk_type:     'Flood Risk',
-  description:   'Water bodies can overflow during extreme rainfall events.',
+  land_class: 'SeaLake',
+  risk_level: 'Medium',
+  risk_type: 'Flood Risk',
+  description: 'Water bodies can overflow during extreme rainfall events.',
   dynamic_report: undefined,
 }
 
@@ -59,18 +59,18 @@ async function pollTaskCompletion(taskId: string): Promise<TaskStatusResponse> {
 
 // ── The Main Hook ─────────────────────────────────────────────────────────────
 interface UseImageAnalysisReturn {
-  currentStep:  ProcessingStep
-  result:       AnalysisResult | null
+  currentStep: ProcessingStep
+  result: AnalysisResult | null
   isProcessing: boolean
   isBackendOnline: boolean
   startAnalysis: (file: File) => Promise<void>
-  reset:        () => void
+  reset: () => void
 }
 
 export function useImageAnalysis(): UseImageAnalysisReturn {
-  const [currentStep,      setCurrentStep]      = useState<ProcessingStep>('idle')
-  const [result,           setResult]           = useState<AnalysisResult | null>(null)
-  const [isBackendOnline,  setIsBackendOnline]  = useState(true)
+  const [currentStep, setCurrentStep] = useState<ProcessingStep>('idle')
+  const [result, setResult] = useState<AnalysisResult | null>(null)
+  const [isBackendOnline, setIsBackendOnline] = useState(true)
 
   const startAnalysis = useCallback(async (file: File) => {
     setResult(null)

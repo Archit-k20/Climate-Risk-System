@@ -2,15 +2,13 @@ from fastapi import APIRouter, UploadFile, File, HTTPException, Depends
 from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 from pathlib import Path
-from ml.ensemble.combine_models import ensemble_predict
 from app.schemas.image import RiskAssessmentResponse
-from app.services.tasks import analyze_image_task
 from celery.result import AsyncResult
 from app.core.celery_app import celery_app
 from PIL import Image as PILImage
 from app.models.image import Image
 from app.models.risk import RiskScore
-from typing import List
+from typing import List, Dict, Any, Optional
 from app.services.image_service import save_risk_score
 import io
 
@@ -22,6 +20,25 @@ from app.services.image_service import (
     get_image_by_id,
     find_similar_images
 )
+
+# Optional ML imports - backend works without these
+try:
+    from ml.ensemble.combine_models import ensemble_predict
+    ML_AVAILABLE = True
+except Exception:
+    ML_AVAILABLE = False
+    def ensemble_predict(path):
+        raise RuntimeError("ML dependencies not available. Install torchvision and torch.")
+
+try:
+    from app.services.tasks import analyze_image_task
+    CELERY_AVAILABLE = True
+except Exception:
+    CELERY_AVAILABLE = False
+    class FakeTask:
+        def delay(self, *args, **kwargs):
+            raise RuntimeError("Celery not properly configured")
+    analyze_image_task = FakeTask()
 
 router = APIRouter(prefix="/images")
 

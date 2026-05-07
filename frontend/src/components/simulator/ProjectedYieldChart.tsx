@@ -68,7 +68,7 @@ export function ProjectedYieldChart({ data, cropType }: ProjectedYieldChartProps
         </span>
       </div>
 
-      <ResponsiveContainer width="100%" height={240}>
+      <ResponsiveContainer width="100%" height={240} minWidth={0} minHeight={0}>
         <ComposedChart data={data} margin={{ top: 5, right: 10, left: 0, bottom: 5 }}>
           <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" vertical={false} />
 

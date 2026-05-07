@@ -1,15 +1,26 @@
 import { useMemo } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { formatDistanceToNow } from 'date-fns'
 import { mockActivityFeed } from '@/lib/mockData'
-import { ImageIcon, Wifi, WifiOff } from 'lucide-react'
+import { ImageIcon, Wifi, WifiOff, SatelliteDish } from 'lucide-react'
 import { useAppStore, LiveActivityEntry } from '@/store/useAppStore'
 import { useRecentAnalyses } from '@/hooks/useRecentAnalyses'
 
 const RISK_COLORS = {
-  low:    'var(--color-emerald)',
-  medium: 'var(--color-amber)',
-  high:   'var(--color-red)',
+  low:    '#10b981',
+  medium: '#f59e0b',
+  high:   '#ef4444',
+}
+
+const RISK_BG = {
+  low:    'rgba(16,185,129,0.08)',
+  medium: 'rgba(245,158,11,0.08)',
+  high:   'rgba(239,68,68,0.08)',
+}
+
+const RISK_LABEL = {
+  low:    'LOW',
+  medium: 'MED',
+  high:   'HIGH',
 }
 
 interface ActivityEntry {
@@ -17,41 +28,37 @@ interface ActivityEntry {
   filename:   string
   riskType:   string
   confidence: number
+  score:      number
+  landClass:  string
   riskLevel:  'low' | 'medium' | 'high'
   timestamp:  Date
   isLive:     boolean
 }
 
+// Strip WhatsApp-style " at HH.MM.SS AM/PM" from filenames
+function cleanFilename(name: string): string {
+  return name.replace(/\s+at\s+[\d.]+\s*(AM|PM)?/i, '').trim()
+}
+
 export function RecentActivityFeed() {
   const { liveActivityEntries } = useAppStore()
-
-  // useRecentAnalyses does two things simultaneously:
-  // 1. Fetches real images from the backend and seeds liveActivityEntries
-  // 2. Returns isBackendOnline so we know which data source to trust
   const { isBackendOnline } = useRecentAnalyses()
 
   const entries: ActivityEntry[] = useMemo(() => {
     const live: ActivityEntry[] = liveActivityEntries.map((e: LiveActivityEntry) => ({
       ...e,
-      isLive: e.isLive,
+      score:     e.score     ?? e.confidence,
+      landClass: e.landClass ?? 'Unknown',
     }))
 
-    // This is the critical decision point.
-    // When the backend is online, we trust only the backend data that
-    // has been seeded into liveActivityEntries via useRecentAnalyses.
-    // We do NOT mix in mock data because that would be misleading —
-    // showing fake entries alongside real ones.
-    // When the backend is offline, liveActivityEntries will be empty
-    // (or contain only WebSocket events from this session), so we
-    // fall back to mock data to keep the UI looking populated.
     if (isBackendOnline) {
-      // Backend is on — show only real data, no mock mixing
       return live.slice(0, 8)
     } else {
-      // Backend is off — mix live session events with mock baseline
       const mock: ActivityEntry[] = mockActivityFeed.map(m => ({
         ...m,
-        isLive: false,
+        score:     m.confidence,
+        landClass: 'Unknown',
+        isLive:    false,
       }))
       return [...live, ...mock].slice(0, 8)
     }
@@ -62,28 +69,34 @@ export function RecentActivityFeed() {
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.4, delay: 0.5 }}
-      className="rounded-xl p-5"
-      style={{ background: 'var(--color-bg-card)', border: '1px solid var(--color-border)' }}
+      className="rounded-2xl p-5 h-full"
+      style={{
+        background: 'linear-gradient(135deg, #0d1424 0%, #090e1a 100%)',
+        border: '1px solid var(--color-border)',
+      }}
     >
-      {/* Header with live/offline indicator */}
+      {/* Header */}
       <div className="flex items-center justify-between mb-4">
-        <p
-          className="text-xs uppercase tracking-widest"
-          style={{ color: 'var(--color-muted)', fontFamily: 'IBM Plex Mono, monospace' }}
-        >
-          Recent Analyses
-        </p>
+        <div className="flex items-center gap-2">
+          <SatelliteDish size={13} style={{ color: 'var(--color-teal)' }} />
+          <p
+            className="text-xs uppercase tracking-[0.15em]"
+            style={{ color: 'var(--color-muted)', fontFamily: 'IBM Plex Mono, monospace' }}
+          >
+            Recent Analyses
+          </p>
+        </div>
         <div className="flex items-center gap-1.5">
           {isBackendOnline ? (
             <>
-              <Wifi size={11} style={{ color: 'var(--color-emerald)' }} />
+              <div className="w-1.5 h-1.5 rounded-full risk-pulse" style={{ background: 'var(--color-emerald)' }} />
               <span className="text-xs" style={{ color: 'var(--color-emerald)', fontFamily: 'IBM Plex Mono, monospace' }}>
-                Live
+                Live Feed
               </span>
             </>
           ) : (
             <>
-              <WifiOff size={11} style={{ color: 'var(--color-muted)' }} />
+              <WifiOff size={10} style={{ color: 'var(--color-muted)' }} />
               <span className="text-xs" style={{ color: 'var(--color-muted)', fontFamily: 'IBM Plex Mono, monospace' }}>
                 Demo
               </span>
@@ -92,104 +105,140 @@ export function RecentActivityFeed() {
         </div>
       </div>
 
-      {/* Empty state when backend is on but no images uploaded yet */}
+      {/* Column headers */}
+      {entries.length > 0 && (
+        <div
+          className="grid gap-3 px-3 mb-2"
+          style={{ gridTemplateColumns: '2.5rem 1fr auto' }}
+        >
+          <span className="text-xs" style={{ color: 'var(--color-muted)', fontFamily: 'IBM Plex Mono, monospace', fontSize: '10px' }}>Score</span>
+          <span className="text-xs" style={{ color: 'var(--color-muted)', fontFamily: 'IBM Plex Mono, monospace', fontSize: '10px' }}>Image / Land Class</span>
+          <span className="text-xs text-right" style={{ color: 'var(--color-muted)', fontFamily: 'IBM Plex Mono, monospace', fontSize: '10px' }}>Risk</span>
+        </div>
+      )}
+
+      {/* Empty state */}
       {isBackendOnline && entries.length === 0 && (
-        <div className="flex flex-col items-center justify-center py-8 text-center">
-          <ImageIcon size={28} style={{ color: 'var(--color-muted)', marginBottom: '12px' }} />
-          <p className="text-sm" style={{ color: 'var(--color-muted)', fontFamily: 'IBM Plex Mono, monospace' }}>
+        <div className="flex flex-col items-center justify-center py-12 text-center">
+          <div
+            className="w-12 h-12 rounded-2xl flex items-center justify-center mb-3"
+            style={{ background: 'rgba(6,182,212,0.1)', border: '1px solid rgba(6,182,212,0.2)' }}
+          >
+            <ImageIcon size={22} style={{ color: 'var(--color-teal)' }} />
+          </div>
+          <p className="text-sm font-medium mb-1" style={{ color: 'hsl(var(--foreground) / 0.6)', fontFamily: 'IBM Plex Mono, monospace' }}>
             No analyses yet
           </p>
-          <p className="text-xs mt-1" style={{ color: 'var(--color-muted)', opacity: 0.6, fontFamily: 'IBM Plex Mono, monospace' }}>
+          <p className="text-xs" style={{ color: 'var(--color-muted)', fontFamily: 'IBM Plex Mono, monospace' }}>
             Upload a satellite image to begin
           </p>
         </div>
       )}
 
-      <div className="flex flex-col gap-3">
+      <div className="flex flex-col gap-2">
         <AnimatePresence initial={false}>
-          {entries.map((item) => (
-            <motion.div
-              key={item.id}
-              layout
-              initial={{ opacity: 0, y: -20, scale: 0.98 }}
-              animate={{ opacity: 1, y: 0, scale: 1 }}
-              exit={{ opacity: 0, x: 16, scale: 0.98 }}
-              transition={{ duration: 0.3 }}
-              className="flex items-center gap-3 p-3 rounded-lg"
-              style={{
-                background: item.isLive
-                  ? `${RISK_COLORS[item.riskLevel]}08`
-                  : 'rgba(255,255,255,0.03)',
-                border: `1px solid ${item.isLive
-                  ? RISK_COLORS[item.riskLevel] + '30'
-                  : 'var(--color-border)'}`,
-              }}
-            >
-              <div
-                className="w-10 h-10 rounded-lg flex items-center justify-center shrink-0"
-                style={{ background: `${RISK_COLORS[item.riskLevel]}20` }}
-              >
-                <ImageIcon size={16} style={{ color: RISK_COLORS[item.riskLevel] }} />
-              </div>
+          {entries.map((item, idx) => {
+            const color = RISK_COLORS[item.riskLevel]
+            const bg    = RISK_BG[item.riskLevel]
 
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-1.5 mb-1">
-                  {item.isLive && (
-                    <span
-                      className="text-xs px-1.5 py-0.5 rounded font-bold"
-                      style={{
-                        background: 'rgba(16,185,129,0.2)',
-                        color: 'var(--color-emerald)',
-                        fontSize: '9px',
-                        fontFamily: 'IBM Plex Mono, monospace',
-                      }}
-                    >
-                      NEW
-                    </span>
-                  )}
-                  <p
-                    className="text-xs font-medium truncate"
-                    style={{ color: 'hsl(var(--foreground))', fontFamily: 'IBM Plex Mono, monospace' }}
-                  >
-                    {item.filename}
-                  </p>
-                </div>
-                <div className="flex items-center gap-2">
-                  <div
-                    className="flex-1 h-1 rounded-full overflow-hidden"
-                    style={{ background: 'var(--color-border)' }}
-                  >
-                    <motion.div
-                      initial={{ width: 0 }}
-                      animate={{ width: `${item.confidence}%` }}
-                      transition={{ duration: 0.6, ease: 'easeOut' }}
-                      className="h-full rounded-full"
-                      style={{ background: RISK_COLORS[item.riskLevel] }}
-                    />
-                  </div>
-                  <span className="text-xs shrink-0" style={{ color: 'var(--color-muted)' }}>
-                    {item.confidence}%
+            return (
+              <motion.div
+                key={item.id}
+                layout
+                initial={{ opacity: 0, x: -12 }}
+                animate={{ opacity: 1, x: 0 }}
+                exit={{ opacity: 0, x: 16 }}
+                transition={{ duration: 0.25, delay: idx * 0.04 }}
+                className="grid items-center gap-3 px-3 py-2.5 rounded-xl group cursor-default"
+                style={{
+                  gridTemplateColumns: '2.5rem 1fr auto',
+                  background: item.isLive ? bg : 'rgba(255,255,255,0.02)',
+                  border: `1px solid ${item.isLive ? color + '30' : 'rgba(255,255,255,0.05)'}`,
+                  transition: 'background 0.2s, border-color 0.2s',
+                }}
+              >
+                {/* Score badge */}
+                <div
+                  className="w-10 h-10 rounded-xl flex flex-col items-center justify-center shrink-0"
+                  style={{ background: `${color}15`, border: `1px solid ${color}25` }}
+                >
+                  <span style={{ fontSize: '13px', fontWeight: 800, color, fontFamily: 'IBM Plex Mono, monospace', lineHeight: 1.1 }}>
+                    {item.score}
+                  </span>
+                  <span style={{ fontSize: '7px', color: `${color}80`, fontFamily: 'IBM Plex Mono, monospace', lineHeight: 1 }}>
+                    /100
                   </span>
                 </div>
-              </div>
 
-              <div className="flex flex-col items-end gap-1 shrink-0">
+                {/* Filename + land class */}
+                <div className="min-w-0">
+                  <div className="flex items-center gap-1.5 mb-0.5">
+                    {item.isLive && (
+                      <span
+                        className="shrink-0 px-1.5 py-0.5 rounded text-xs font-bold"
+                        style={{
+                          background: 'rgba(16,185,129,0.2)',
+                          color: 'var(--color-emerald)',
+                          fontSize: '8px',
+                          fontFamily: 'IBM Plex Mono, monospace',
+                          letterSpacing: '0.05em',
+                        }}
+                      >
+                        NEW
+                      </span>
+                    )}
+                    <p
+                      className="text-xs font-medium truncate"
+                      style={{ color: 'hsl(var(--foreground) / 0.85)', fontFamily: 'IBM Plex Mono, monospace' }}
+                    >
+                      {cleanFilename(item.filename)}
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    {item.landClass && item.landClass !== 'Unknown' && (
+                      <span
+                        style={{
+                          fontSize: '10px',
+                          color: 'var(--color-teal)',
+                          fontFamily: 'IBM Plex Mono, monospace',
+                          opacity: 0.75,
+                        }}
+                      >
+                        {item.landClass}
+                      </span>
+                    )}
+                    <span
+                      className="px-1.5 py-0.5 rounded"
+                      style={{
+                        background: `${color}12`,
+                        color: `${color}cc`,
+                        fontSize: '9px',
+                        fontFamily: 'IBM Plex Mono, monospace',
+                        border: `1px solid ${color}20`,
+                      }}
+                    >
+                      {item.riskType}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Risk level pill */}
                 <span
-                  className="text-xs px-2 py-0.5 rounded-full font-medium"
+                  className="px-2.5 py-1 rounded-full text-xs font-bold shrink-0"
                   style={{
-                    background: `${RISK_COLORS[item.riskLevel]}20`,
-                    color: RISK_COLORS[item.riskLevel],
+                    background: `${color}18`,
+                    color,
+                    border: `1px solid ${color}30`,
                     fontFamily: 'IBM Plex Mono, monospace',
+                    fontSize: '9px',
+                    letterSpacing: '0.08em',
                   }}
                 >
-                  {item.riskType}
+                  {RISK_LABEL[item.riskLevel]}
                 </span>
-                <span className="text-xs" style={{ color: 'var(--color-muted)', fontSize: '10px' }}>
-                  {formatDistanceToNow(item.timestamp, { addSuffix: true })}
-                </span>
-              </div>
-            </motion.div>
-          ))}
+              </motion.div>
+            )
+          })}
         </AnimatePresence>
       </div>
     </motion.div>

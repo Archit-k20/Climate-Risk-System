@@ -7,101 +7,134 @@ import { MapFilterPanel } from '@/components/map/MapFilterPanel'
 import { MapLegend } from '@/components/map/MapLegend'
 import { mockMapPoints } from '@/lib/mockData'
 import { useAppStore } from '@/store/useAppStore'
+import { Globe, MapPin } from 'lucide-react'
 
 export default function RiskMapPage() {
   const { mapFilters } = useAppStore()
 
-  // Filter the map points based on active filter selections.
-  // useMemo prevents recalculating on every render — only recalculates
-  // when the filters or the source data actually change.
   const filteredPoints = useMemo(() =>
     mockMapPoints.filter(
       (p) =>
         mapFilters.riskLevels.includes(p.riskLevel) &&
-        mapFilters.riskTypes.includes(p.riskType)
+        (mapFilters.riskTypes.includes(p.riskType) || mapFilters.riskTypes.length === 0)
     ),
     [mapFilters]
   )
 
+  const highCount   = filteredPoints.filter(p => p.riskLevel === 'high').length
+  const mediumCount = filteredPoints.filter(p => p.riskLevel === 'medium').length
+  const lowCount    = filteredPoints.filter(p => p.riskLevel === 'low').length
+
   return (
     <PageTransition>
-      {/* Page header */}
-      <div className="mb-4">
-        <h2
-          className="text-2xl font-bold"
-          style={{ fontFamily: 'Syne, sans-serif', color: 'hsl(var(--foreground))' }}
-        >
-          Geospatial Risk Map
-        </h2>
-        <p
-          className="text-sm mt-1"
-          style={{ color: 'var(--color-muted)', fontFamily: 'IBM Plex Mono, monospace' }}
-        >
-          {filteredPoints.length} of {mockMapPoints.length} risk zones displayed
-        </p>
+      {/* ── Page Header ─────────────────────────────────────────────────────── */}
+      <div className="flex items-start justify-between mb-4 flex-wrap gap-3">
+        <div>
+          <div className="flex items-center gap-2 mb-1">
+            <Globe size={13} style={{ color: 'var(--color-teal)' }} />
+            <span
+              className="text-xs uppercase tracking-[0.15em]"
+              style={{ color: 'var(--color-teal)', fontFamily: 'IBM Plex Mono, monospace' }}
+            >
+              India Climate Risk Atlas
+            </span>
+          </div>
+          <h2
+            className="text-3xl font-black"
+            style={{ fontFamily: 'Syne, sans-serif', color: 'hsl(var(--foreground))' }}
+          >
+            Geospatial Risk Map
+          </h2>
+          <p
+            className="text-xs mt-1"
+            style={{ color: 'var(--color-muted)', fontFamily: 'IBM Plex Mono, monospace' }}
+          >
+            {filteredPoints.length} of {mockMapPoints.length} risk zones displayed across India
+          </p>
+        </div>
+
+        {/* Risk level summary pills */}
+        <div className="flex items-center gap-2 flex-wrap">
+          <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full"
+            style={{ background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.25)' }}>
+            <div className="w-1.5 h-1.5 rounded-full" style={{ background: '#ef4444' }} />
+            <span className="text-xs font-bold" style={{ color: '#ef4444', fontFamily: 'IBM Plex Mono, monospace' }}>
+              {highCount} High
+            </span>
+          </div>
+          <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full"
+            style={{ background: 'rgba(245,158,11,0.1)', border: '1px solid rgba(245,158,11,0.25)' }}>
+            <div className="w-1.5 h-1.5 rounded-full" style={{ background: '#f59e0b' }} />
+            <span className="text-xs font-bold" style={{ color: '#f59e0b', fontFamily: 'IBM Plex Mono, monospace' }}>
+              {mediumCount} Medium
+            </span>
+          </div>
+          <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full"
+            style={{ background: 'rgba(16,185,129,0.1)', border: '1px solid rgba(16,185,129,0.25)' }}>
+            <div className="w-1.5 h-1.5 rounded-full" style={{ background: '#10b981' }} />
+            <span className="text-xs font-bold" style={{ color: '#10b981', fontFamily: 'IBM Plex Mono, monospace' }}>
+              {lowCount} Low
+            </span>
+          </div>
+        </div>
       </div>
 
-      {/* Map container — relative positioning allows overlay panels */}
+      {/* ── Map Container ───────────────────────────────────────────────────── */}
       <div
-        className="relative rounded-xl overflow-hidden"
+        className="relative rounded-2xl overflow-hidden"
         style={{
-          height: 'calc(100vh - 200px)',
+          height: 'calc(100vh - 220px)',
           border: '1px solid var(--color-border)',
-          minHeight: '500px',
+          minHeight: '520px',
+          boxShadow: '0 0 0 1px rgba(6,182,212,0.08)',
         }}
       >
-        {/*
-          MapContainer renders the Leaflet map.
-          - center: starting view position (centered on Africa/Europe for global coverage)
-          - zoom: starting zoom level (3 = continental view)
-          - style height 100% fills the parent div
-          - zoomControl: false because we'll use the default zoom controls styled via CSS
-        */}
         <MapContainer
-          center={[20, 10]}
-          zoom={3}
+          center={[20.5, 78.9]}   // Geographic centre of India
+          zoom={5}                 // Country-level zoom
           style={{ height: '100%', width: '100%' }}
           zoomControl={true}
+          minZoom={4}
+          maxZoom={14}
         >
-          {/*
-            OpenStreetMap tile layer — free, no API key required.
-            We use the CartoDB dark matter tiles for a dark aesthetic
-            that matches our dashboard theme perfectly.
-          */}
+          {/* Dark CartoDB tiles — matches our dashboard theme */}
           <TileLayer
             url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
             attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
             maxZoom={19}
           />
 
-          {/* Heatmap overlay — renders the risk intensity gradient */}
+          {/* Heatmap overlay */}
           <HeatmapLayer points={filteredPoints} />
 
-          {/* Individual risk markers — one per analyzed image location */}
+          {/* Individual risk markers */}
           {filteredPoints.map((point) => (
             <RiskMarker key={point.id} point={point} />
           ))}
         </MapContainer>
 
-        {/* Filter panel — floats over the map in the top-left */}
+        {/* Filter panel — top-left overlay */}
         <div className="absolute top-4 left-4" style={{ zIndex: 1000 }}>
           <MapFilterPanel />
         </div>
 
-        {/* Legend — floats over the map in the bottom-right */}
+        {/* Legend — bottom-right overlay */}
         <div className="absolute bottom-4 right-4" style={{ zIndex: 1000 }}>
           <MapLegend />
         </div>
 
-        {/* Point count badge — top-right */}
+        {/* Zone count badge — top-right */}
         <div
-          className="absolute top-4 right-4 px-3 py-1.5 rounded-lg glass"
-          style={{ zIndex: 1000 }}
+          className="absolute top-4 right-4 flex items-center gap-1.5 px-3 py-1.5 rounded-xl"
+          style={{
+            zIndex: 1000,
+            background: 'rgba(13,20,36,0.85)',
+            border: '1px solid var(--color-border)',
+            backdropFilter: 'blur(8px)',
+          }}
         >
-          <span
-            className="text-xs"
-            style={{ color: 'hsl(var(--foreground))', fontFamily: 'IBM Plex Mono, monospace' }}
-          >
+          <MapPin size={11} style={{ color: 'var(--color-teal)' }} />
+          <span className="text-xs font-medium" style={{ color: 'hsl(var(--foreground))', fontFamily: 'IBM Plex Mono, monospace' }}>
             {filteredPoints.length} zones active
           </span>
         </div>
