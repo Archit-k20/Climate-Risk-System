@@ -1,7 +1,7 @@
 import { useMemo } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { mockActivityFeed } from '@/lib/mockData'
-import { ImageIcon, Wifi, WifiOff, SatelliteDish } from 'lucide-react'
+import { ImageIcon, WifiOff, SatelliteDish } from 'lucide-react'
 import { useAppStore, LiveActivityEntry } from '@/store/useAppStore'
 import { useRecentAnalyses } from '@/hooks/useRecentAnalyses'
 

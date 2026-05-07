@@ -130,7 +130,7 @@ export function RiskDistributionChart() {
         <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0}>
           <PieChart>
             <defs>
-              {chartData.map((d, i) => (
+              {chartData.map((_, i) => (
                 <filter key={i} id={`glow-${i}`} x="-20%" y="-20%" width="140%" height="140%">
                   <feGaussianBlur stdDeviation="3" result="coloredBlur" />
                   <feMerge>

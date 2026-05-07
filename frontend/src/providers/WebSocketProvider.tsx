@@ -63,6 +63,8 @@ export function WebSocketProvider({
     filename:   data.filename,
     riskType:   data.risk_type,
     confidence: data.confidence,
+    score:      data.confidence,
+    landClass:  'Unknown',
     riskLevel:  data.risk_level,
     timestamp:  new Date(),
     isLive:     true,
