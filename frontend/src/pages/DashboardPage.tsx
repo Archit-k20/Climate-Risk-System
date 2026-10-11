@@ -1,188 +1,251 @@
-import { ElementType } from 'react'
-import { LayoutDashboard, AlertTriangle, BarChart3, FileCheck, Zap, Globe, Thermometer, Wind } from 'lucide-react'
-import { PageTransition } from '@/components/layout/PageTransition'
-import { KPICard } from '@/components/dashboard/KPICard'
-import { RiskDistributionChart } from '@/components/dashboard/RiskDistributionChart'
-import { RecentActivityFeed } from '@/components/dashboard/RecentActivityFeed'
-import { SystemStatusBar } from '@/components/dashboard/SystemStatusBar'
-import { LiveUpdateBanner } from '@/components/dashboard/LiveUpdateBanner'
-import { KPICardSkeleton } from '@/components/ui/KPICardSkeleton'
-import { SkeletonCard } from '@/components/ui/SkeletonCard'
-import { useSocket } from '@/providers/WebSocketProvider'
-import { useDashboardStats } from '@/hooks/useDashboardStats'
-import { mockSparklines } from '@/lib/mockData'
-
-
-// ── Simulate Live Event Button ────────────────────────────────────────────────
-function SimulateLiveEventButton() {
-  const { simulateEvent } = useSocket()
-
-  const RISK_TYPES  = ['Drought', 'Flood', 'Wildfire', 'Deforestation', 'Erosion']
-  const RISK_LEVELS = ['low', 'medium', 'high'] as const
-  const FILENAMES   = ['sahel_survey_new.jpg', 'amazon_patch_08.jpg', 'sierra_scan_04.jpg', 'delta_image_03.jpg']
-
-  const fireEvent = () => {
-    const riskLevel = RISK_LEVELS[Math.floor(Math.random() * RISK_LEVELS.length)]
-    simulateEvent('analysis_complete', {
-      image_id:    Math.floor(Math.random() * 1000),
-      filename:    FILENAMES[Math.floor(Math.random() * FILENAMES.length)],
-      risk_score:  riskLevel === 'high'   ? 70 + Math.floor(Math.random() * 30)
-                 : riskLevel === 'medium' ? 35 + Math.floor(Math.random() * 30)
-                 : Math.floor(Math.random() * 30),
-      risk_level:  riskLevel,
-      risk_type:   RISK_TYPES[Math.floor(Math.random() * RISK_TYPES.length)],
-      confidence:  65 + Math.floor(Math.random() * 30),
-      analyzed_at: new Date().toISOString(),
-    })
-  }
-
+import { Link } from "react-router-dom";
+import { ArrowUpRight } from "lucide-react";
+import { PieChart, Pie, Cell, ResponsiveContainer } from "recharts";
+import { useQuery } from "@tanstack/react-query";
+import { PageTransition } from "@/components/layout/PageTransition";
+import { RiskBadge } from "@/components/ui/PageHeader";
+import { useReports, useSummary, useDistribution } from "@/hooks/useReports";
+import { isDemo } from "@/lib/config";
+import { api } from "@/lib/api";
+import { useAppStore } from "@/store/useAppStore";
+function Terrain() {
   return (
-    <button
-      onClick={fireEvent}
-      className="flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-medium transition-all hover:opacity-90 active:scale-95"
-      style={{
-        background: 'rgba(245,158,11,0.1)',
-        border: '1px solid rgba(245,158,11,0.3)',
-        color: 'var(--color-amber)',
-        fontFamily: 'IBM Plex Mono, monospace',
-      }}
-    >
-      <Zap size={12} />
-      Simulate Event
-    </button>
-  )
-}
-
-// ── Climate Stat Pill ─────────────────────────────────────────────────────────
-function ClimatePill({ icon: Icon, label, value, color }: {
-  icon: ElementType
-  label: string
-  value: string
-  color: string
-}) {
-  return (
-    <div
-      className="flex items-center gap-2 px-3 py-1.5 rounded-full"
-      style={{ background: `${color}12`, border: `1px solid ${color}25` }}
-    >
-      <Icon size={11} style={{ color }} />
-      <span className="text-xs" style={{ color: 'hsl(var(--foreground) / 0.5)', fontFamily: 'IBM Plex Mono, monospace' }}>
-        {label}
-      </span>
-      <span className="text-xs font-bold" style={{ color, fontFamily: 'IBM Plex Mono, monospace' }}>
-        {value}
-      </span>
+    <div>
+      <svg className="terrain" viewBox="0 0 460 270" aria-hidden="true">
+        {Array.from({ length: 31 }, (_, j) => {
+          const d = Array.from({ length: 95 }, (_, i) => {
+            const x = 8 + i * 4.7,
+              ridge =
+                48 *
+                  Math.exp(-(((i - 45) / 21) ** 2)) *
+                  Math.sin(j * 0.115 + 0.3) +
+                17 * Math.sin(i * 0.065 + j * 0.125);
+            const y = 20 + j * 7.6 - Math.sin((Math.PI * i) / 94) * ridge;
+            return `${i ? "L" : "M"}${x.toFixed(1)},${y.toFixed(1)}`;
+          }).join("");
+          return (
+            <path
+              key={j}
+              d={d}
+              fill="none"
+              stroke="currentColor"
+              strokeWidth={j % 5 === 0 ? 1.3 : 0.7}
+              opacity={j % 5 === 0 ? 0.85 : 0.48}
+            />
+          );
+        })}
+      </svg>
+      <div className="terrain-caption">
+        <span>Land / Water / Atmosphere</span>
+        <span>Abstract terrain study</span>
+      </div>
     </div>
-  )
+  );
 }
-
-// ── Dashboard Page ────────────────────────────────────────────────────────────
 export default function DashboardPage() {
-  const { stats, isLoading } = useDashboardStats()
-
-  const KPI_CONFIGS = [
-    {
-      title:          'Images Analyzed',
-      value:          stats.total_analyzed,
-      icon:           <LayoutDashboard size={15} />,
-      sparklineData:  mockSparklines.totalAnalyzed,
-      sparklineColor: 'var(--color-teal)',
-      accentColor:    'var(--color-teal)',
-    },
-    {
-      title:          'High Risk Zones',
-      value:          stats.active_high_risk_zones,
-      icon:           <AlertTriangle size={15} />,
-      sparklineData:  mockSparklines.activeHighRiskZones,
-      sparklineColor: 'var(--color-red)',
-      accentColor:    'var(--color-red)',
-    },
-    {
-      title:          'Avg Risk Score',
-      value:          stats.average_risk_score,
-      suffix:         '%',
-      icon:           <BarChart3 size={15} />,
-      sparklineData:  mockSparklines.averageRiskScore,
-      sparklineColor: 'var(--color-amber)',
-      accentColor:    'var(--color-amber)',
-    },
-    {
-      title:          'Reports Generated',
-      value:          stats.reports_generated,
-      icon:           <FileCheck size={15} />,
-      sparklineData:  mockSparklines.reportsGenerated,
-      sparklineColor: 'var(--color-emerald)',
-      accentColor:    'var(--color-emerald)',
-    },
-  ]
-
+  const summary = useSummary(),
+    reports = useReports(),
+    distribution = useDistribution();
+  const refresh = useAppStore((s) => s.autoRefresh);
+  const health = useQuery({
+    queryKey: ["health"],
+    enabled: !isDemo,
+    queryFn: async () =>
+      (await api.get<{ services: Record<string, string> }>("/health")).data,
+    refetchInterval: refresh ? 30_000 : false,
+    retry: false,
+  });
+  const stats = [
+    ["Images analyzed", summary.data?.total_analyzed],
+    ["High-risk analyses", summary.data?.active_high_risk_zones],
+    ["Average risk index", summary.data?.average_risk_score],
+    ["Reports generated", summary.data?.reports_generated],
+  ] as const;
+  const chart = ["low", "medium", "high"].map((level) => ({
+    name: level,
+    value: distribution.data?.[level as "low" | "medium" | "high"] || 0,
+  }));
   return (
     <PageTransition>
-      {/* ── Page Header ───────────────────────────────────────────────────── */}
-      <div className="flex items-start justify-between mb-5">
+      <section className="hero">
         <div>
-          <div className="flex items-center gap-2 mb-1">
-            <Globe size={14} style={{ color: 'var(--color-teal)' }} />
-            <span
-              className="text-xs uppercase tracking-[0.15em]"
-              style={{ color: 'var(--color-teal)', fontFamily: 'IBM Plex Mono, monospace' }}
-            >
-              Climate Intelligence Platform
-            </span>
-          </div>
-          <h2
-            className="text-3xl font-black"
-            style={{ fontFamily: 'Syne, sans-serif', color: 'hsl(var(--foreground))' }}
-          >
-            Risk Overview
-          </h2>
-          <p
-            className="text-xs mt-1"
-            style={{ color: 'var(--color-muted)', fontFamily: 'IBM Plex Mono, monospace' }}
-          >
-            Real-time satellite analysis across all monitored regions
+          <p className="eyebrow">A climate observatory</p>
+          <h1>
+            A closer look
+            <br />
+            at our planet.
+          </h1>
+          <p className="hero-description">
+            Satellite imagery. Environmental risk.
+            <br />
+            One considered perspective.
+          </p>
+          <p className="sample-note">
+            {isDemo
+              ? "Sample workspace · Explore six illustrative analyses"
+              : "Land-cover classifications · Rule-based risk indices"}
           </p>
         </div>
-
-        <div className="flex items-center gap-2 flex-wrap justify-end">
-          {/* Climate context pills */}
-          <ClimatePill icon={Thermometer} label="CO₂" value="+2.1°C" color="var(--color-amber)" />
-          <ClimatePill icon={Wind} label="Events" value="↑ 34%" color="var(--color-red)" />
-          <SimulateLiveEventButton />
+        <Terrain />
+      </section>
+      {summary.isError && (
+        <div className="notice error" role="alert">
+          Dashboard statistics are unavailable.{" "}
+          <button
+            className="text-button"
+            onClick={() => void summary.refetch()}
+          >
+            Retry
+          </button>
         </div>
-      </div>
-
-      {/* ── System Status ─────────────────────────────────────────────────── */}
-      <SystemStatusBar />
-      <LiveUpdateBanner />
-
-      {/* ── KPI Cards ─────────────────────────────────────────────────────── */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4 mb-5">
-        {isLoading
-          ? Array.from({ length: 4 }).map((_, i) => <KPICardSkeleton key={i} />)
-          : KPI_CONFIGS.map((config, index) => (
-              <KPICard key={config.title} {...config} index={index} />
+      )}
+      <dl className="metrics">
+        {stats.map(([label, value], i) => (
+          <div className="metric" key={label}>
+            <dt>{label}</dt>
+            <dd>
+              {value ?? "—"}
+              {i === 2 && <small>/ 100</small>}
+            </dd>
+          </div>
+        ))}
+      </dl>
+      <div className="dashboard-bottom">
+        <section>
+          <div className="section-heading">
+            <h2>Risk distribution</h2>
+            <span className="eyebrow">
+              {isDemo ? "Sample data" : "Completed analyses"}
+            </span>
+          </div>
+          {distribution.isError ? (
+            <p className="empty-state">Distribution unavailable.</p>
+          ) : distribution.isPending ? (
+            <p className="empty-state">Loading distribution…</p>
+          ) : !distribution.data?.total ? (
+            <p className="empty-state">No completed analyses yet.</p>
+          ) : (
+            <div className="distribution">
+              <div
+                className="donut"
+                role="img"
+                aria-label={chart
+                  .map((c) => `${c.name}: ${c.value}`)
+                  .join(", ")}
+              >
+                <ResponsiveContainer
+                  initialDimension={{ width: 160, height: 160 }}
+                  width="100%"
+                  height="100%"
+                  minWidth={100}
+                  minHeight={100}
+                >
+                  <PieChart>
+                    <Pie
+                      data={chart}
+                      dataKey="value"
+                      innerRadius="70%"
+                      outerRadius="95%"
+                      startAngle={90}
+                      endAngle={-270}
+                      stroke="var(--color-bg-base)"
+                      strokeWidth={4}
+                      isAnimationActive={false}
+                    >
+                      {["--color-emerald", "--color-amber", "--color-red"].map(
+                        (color) => (
+                          <Cell key={color} fill={`var(${color})`} />
+                        ),
+                      )}
+                    </Pie>
+                  </PieChart>
+                </ResponsiveContainer>
+              </div>
+              <div className="legend">
+                {chart.map((c) => (
+                  <div className="legend-row" key={c.name}>
+                    <RiskBadge level={c.name} />
+                    <span>
+                      {c.value}{" "}
+                      <small>
+                        {" "}
+                        /{" "}
+                        {Math.round((c.value / distribution.data!.total) * 100)}
+                        %
+                      </small>
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+          <p className="record-meta" style={{ marginTop: 22 }}>
+            A heuristic index, not a probability of an event.
+          </p>
+        </section>
+        <section>
+          <div className="section-heading">
+            <h2>Recent analyses</h2>
+            <Link className="text-button" to="/reports">
+              All reports <ArrowUpRight size={14} />
+            </Link>
+          </div>
+          {reports.isPending ? (
+            <p className="empty-state">Loading analyses…</p>
+          ) : reports.isError ? (
+            <p className="empty-state">
+              Reports are unavailable.{" "}
+              <button
+                className="text-button"
+                onClick={() => void reports.refetch()}
+              >
+                Retry
+              </button>
+            </p>
+          ) : !reports.data?.length ? (
+            <p className="empty-state">
+              Your completed analyses will appear here.
+            </p>
+          ) : (
+            reports.data.slice(0, 4).map((r) => (
+              <Link
+                className="recent-row"
+                key={r.id}
+                to={`/reports?report=${r.id}`}
+              >
+                <div>
+                  <div className="record-title">
+                    {r.land_class || "Classification unavailable"}
+                  </div>
+                  <span className="record-meta">
+                    {r.filename} · {r.risk_type || "Unknown risk type"}
+                  </span>
+                </div>
+                <div className="record-score">
+                  {r.score ?? "—"}
+                  <br />
+                  <RiskBadge level={r.risk_level} />
+                </div>
+              </Link>
             ))
-        }
+          )}
+        </section>
       </div>
-
-      {/* ── Bottom Row: Chart + Feed ───────────────────────────────────────── */}
-      <div className="grid grid-cols-1 lg:grid-cols-5 gap-4">
-        {/* Risk donut chart */}
-        <div className="lg:col-span-2">
-          {isLoading
-            ? <SkeletonCard lines={4} height="360px" />
-            : <RiskDistributionChart />
-          }
-        </div>
-        {/* Recent analysis feed */}
-        <div className="lg:col-span-3">
-          {isLoading
-            ? <SkeletonCard lines={5} height="360px" />
-            : <RecentActivityFeed />
-          }
-        </div>
+      <div className="status-line">
+        {isDemo ? (
+          <span>
+            <i />
+            Demonstration mode · Backend connections disabled
+          </span>
+        ) : (
+          ["api", "database", "redis", "model"].map((name) => (
+            <span key={name}>
+              <i className={health.data?.services[name] || ""} />
+              {name}: {health.data?.services[name] || "unknown"}
+            </span>
+          ))
+        )}
       </div>
     </PageTransition>
-  )
+  );
 }

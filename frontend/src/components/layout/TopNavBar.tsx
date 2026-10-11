@@ -1,102 +1,115 @@
-import { Bell, Search, Satellite } from 'lucide-react'
-import { useAppStore } from '@/store/useAppStore'
-
-/**
- * Fixed top navigation bar with frosted glass effect.
- * Shows the project logo, search bar, notification bell, and connection status.
- */
+import { useState, useRef } from "react";
+import { NavLink, Link } from "react-router-dom";
+import { ArrowUpRight, Bell, Menu, X } from "lucide-react";
+import { useAppStore } from "@/store/useAppStore";
+import { isDemo } from "@/lib/config";
+const routes = [
+  ["/", "Overview"],
+  ["/upload", "Upload & Analyze"],
+  ["/risk-map", "Risk Map"],
+  ["/simulator", "Simulator"],
+  ["/reports", "Reports"],
+  ["/settings", "Settings"],
+];
 export function TopNavBar() {
-  const { notifications, connectionStatus } = useAppStore()
-  const unreadCount = notifications.filter((n) => !n.read).length
-
+  const [menu, setMenu] = useState(false);
+  const [bell, setBell] = useState(false);
+  const menuButton = useRef<HTMLButtonElement>(null);
+  const bellButton = useRef<HTMLButtonElement>(null);
+  const { notifications, markNotificationRead, clearNotifications } =
+    useAppStore();
   return (
     <header
-      className="glass fixed top-0 left-0 right-0 z-50 h-16 flex items-center justify-between px-6"
-      style={{ borderBottom: '1px solid var(--color-border)' }}
+      className="site-header"
+      onKeyDown={(e) => {
+        if (e.key === "Escape") {
+          if (bell) bellButton.current?.focus();
+          else if (menu) menuButton.current?.focus();
+          setMenu(false);
+          setBell(false);
+        }
+      }}
     >
-      {/* ── Logo ── */}
-      <div className="flex items-center gap-3">
-        <div
-          className="w-8 h-8 rounded-lg flex items-center justify-center"
-          style={{ background: 'linear-gradient(135deg, var(--color-teal), var(--color-amber))' }}
-        >
-          <Satellite size={16} className="text-white" />
-        </div>
-        <div>
-          <h1
-            className="text-sm font-bold tracking-wider uppercase"
-            style={{ fontFamily: 'Syne, sans-serif', color: 'var(--color-amber)' }}
-          >
-            ClimateRisk
-          </h1>
-          <p className="text-xs" style={{ color: 'var(--color-muted)', fontSize: '10px' }}>
-            Intelligence Dashboard
-          </p>
-        </div>
-      </div>
-
-      {/* ── Right Controls ── */}
-      <div className="flex items-center gap-4">
-        {/* Search */}
-        <div
-          className="hidden md:flex items-center gap-2 px-3 py-2 rounded-lg text-sm"
-          style={{ background: 'var(--color-bg-card)', border: '1px solid var(--color-border)', color: 'var(--color-muted)' }}
-        >
-          <Search size={14} />
-          <span style={{ fontSize: '13px' }}>Search regions, reports...</span>
-          <kbd
-            className="ml-4 px-1.5 py-0.5 rounded text-xs"
-            style={{ background: 'var(--color-border)', color: 'var(--color-muted)' }}
-          >
-            ⌘K
-          </kbd>
-        </div>
-
-        {/* Connection Status Dot */}
-        <div className="flex items-center gap-1.5">
-          <div
-            className={`w-2 h-2 rounded-full ${connectionStatus === 'connected' ? 'risk-pulse' : ''}`}
-            style={{
-              background:
-                connectionStatus === 'connected'
-                  ? 'var(--color-emerald)'
-                  : connectionStatus === 'reconnecting'
-                  ? 'var(--color-amber)'
-                  : 'var(--color-muted)',
-            }}
-          />
-          <span className="text-xs hidden sm:block" style={{ color: 'var(--color-muted)' }}>
-            {connectionStatus === 'connected' ? 'Live' : connectionStatus === 'reconnecting' ? 'Reconnecting' : 'Offline'}
+      <div className="brand-row">
+        <Link to="/" className="brand">
+          ClimateRisk <ArrowUpRight size={21} />
+        </Link>
+        <div className="header-tools">
+          <span className="mode-tag">
+            <i />
+            {isDemo ? "Demonstration" : "Connected workspace"}
           </span>
-        </div>
-
-        {/* Notification Bell */}
-        <button
-          className="relative w-9 h-9 rounded-lg flex items-center justify-center transition-colors hover:bg-white/5"
-          style={{ border: '1px solid var(--color-border)' }}
-        >
-          <Bell size={16} style={{ color: 'var(--color-muted)' }} />
-          {unreadCount > 0 && (
-            <span
-              className="absolute -top-1 -right-1 w-4 h-4 rounded-full text-xs flex items-center justify-center font-bold"
-              style={{ background: 'var(--color-amber)', color: 'var(--color-bg-base)', fontSize: '10px' }}
-            >
-              {unreadCount > 9 ? '9+' : unreadCount}
-            </span>
-          )}
-        </button>
-
-        {/* User Avatar */}
-        <div
-          className="w-9 h-9 rounded-full flex items-center justify-center text-sm font-bold cursor-pointer"
-          style={{
-            background: 'linear-gradient(135deg, var(--color-teal), var(--color-amber))',
-            fontFamily: 'Syne, sans-serif',
-          }}
-        >
-          CR
+          <button
+            ref={bellButton}
+            className="icon-button"
+            aria-label={`Notifications${notifications.some((n) => !n.read) ? ", unread items" : ""}`}
+            aria-expanded={bell}
+            aria-controls="notifications"
+            onClick={() => setBell(!bell)}
+          >
+            <Bell size={18} />
+            {notifications.some((n) => !n.read) && <i className="unread-dot" />}
+          </button>
+          <button
+            ref={menuButton}
+            className="icon-button mobile-menu"
+            aria-label="Navigation menu"
+            aria-expanded={menu}
+            aria-controls="main-nav"
+            onClick={() => setMenu(!menu)}
+          >
+            {menu ? <X size={21} /> : <Menu size={21} />}
+          </button>
         </div>
       </div>
+      <nav
+        id="main-nav"
+        aria-label="Main navigation"
+        className={`main-nav ${menu ? "open" : ""}`}
+      >
+        {routes.map(([path, label], i) => (
+          <NavLink
+            key={path}
+            to={path}
+            end={path === "/"}
+            onClick={() => setMenu(false)}
+          >
+            <span className="nav-index">0{i + 1}</span>
+            {label}
+          </NavLink>
+        ))}
+      </nav>
+      {bell && (
+        <section
+          id="notifications"
+          className="notification-panel"
+          aria-label="Notifications"
+        >
+          <div className="section-heading">
+            <h2>Notifications</h2>
+            <button className="text-button" onClick={clearNotifications}>
+              Clear
+            </button>
+          </div>
+          {notifications.length ? (
+            notifications.map((n) => (
+              <button
+                key={n.id}
+                className={`notification ${n.read ? "read" : ""}`}
+                onClick={() => markNotificationRead(n.id)}
+              >
+                {n.message}
+                <small>
+                  {new Date(n.timestamp).toLocaleString()}
+                  {n.read ? " · Read" : " · Mark as read"}
+                </small>
+              </button>
+            ))
+          ) : (
+            <p>No notifications yet.</p>
+          )}
+        </section>
+      )}
     </header>
-  )
+  );
 }

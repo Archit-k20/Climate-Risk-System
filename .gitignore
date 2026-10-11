@@ -207,3 +207,7 @@ desktop.ini
 *.temp
 *.bak
 *.orig
+
+# Local review outputs and model compatibility manifests
+review-artifacts/
+ml/models/manifest.json

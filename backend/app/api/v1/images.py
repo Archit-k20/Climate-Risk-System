@@ -1,362 +1,194 @@
-from fastapi import APIRouter, UploadFile, File, HTTPException, Depends
+import io
+from pathlib import Path
+from fastapi import APIRouter, UploadFile, File, HTTPException, Depends, Query
 from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
-from pathlib import Path
-from app.schemas.image import RiskAssessmentResponse
-from celery.result import AsyncResult
-from app.core.celery_app import celery_app
-from PIL import Image as PILImage
+from sqlalchemy import func
+from PIL import Image as PILImage, UnidentifiedImageError
+from app.db.session import get_db
 from app.models.image import Image
-from app.models.risk import RiskScore
-from typing import List, Dict, Any, Optional
-from app.services.image_service import save_risk_score
-import io
-
-from app.db.session import get_db   
-from app.schemas.image import ImageResponse
+from app.models.analysis import Analysis
+from app.schemas.image import (
+    ImageResponse,
+    AnalysisResponse,
+    TaskResponse,
+    AnalysisSubmission,
+)
 from app.services.image_service import (
     create_image,
     save_image_file,
-    get_image_by_id,
-    find_similar_images
+    find_similar_images,
+)
+from app.services.analysis_service import (
+    reserve,
+    execute_analysis,
+    serialize,
+    archived_reports,
+    expire_stale,
 )
 
-# Optional ML imports - backend works without these
-try:
-    from ml.ensemble.combine_models import ensemble_predict
-    ML_AVAILABLE = True
-except Exception:
-    ML_AVAILABLE = False
-    def ensemble_predict(path):
-        raise RuntimeError("ML dependencies not available. Install torchvision and torch.")
-
-try:
-    from app.services.tasks import analyze_image_task
-    CELERY_AVAILABLE = True
-except Exception:
-    CELERY_AVAILABLE = False
-    class FakeTask:
-        def delay(self, *args, **kwargs):
-            raise RuntimeError("Celery not properly configured")
-    analyze_image_task = FakeTask()
-
 router = APIRouter(prefix="/images")
+MAX_FILE_SIZE = 5 * 1024 * 1024
 
-ALLOWED_TYPES = {"image/jpeg", "image/png"}
-MAX_FILE_SIZE = 5 * 1024 * 1024 
+
+def require_image(db, image_id):
+    image = db.get(Image, image_id)
+    if not image:
+        raise HTTPException(404, "Image not found")
+    return image
 
 
 @router.post("/upload", response_model=ImageResponse)
-def upload_image(
-    file: UploadFile = File(...),
-    db: Session = Depends(get_db)
-):
-    if file.content_type not in ALLOWED_TYPES:
-        raise HTTPException(status_code=400, detail="Only JPEG and PNG allowed")
-
-    contents = file.file.read()
-
+def upload_image(file: UploadFile = File(...), db: Session = Depends(get_db)):
+    expected = {"image/jpeg": "JPEG", "image/png": "PNG"}.get(file.content_type)
+    if not expected:
+        raise HTTPException(415, "Only JPEG and PNG images are supported.")
+    contents = file.file.read(MAX_FILE_SIZE + 1)
     if len(contents) > MAX_FILE_SIZE:
-        raise HTTPException(status_code=400, detail="File too large")
-
+        raise HTTPException(413, "Image must be 5 MiB or smaller.")
     try:
-        PILImage.open(io.BytesIO(contents)).verify()
-    except Exception:
-        raise HTTPException(status_code=400, detail="Invalid image")
-
+        with PILImage.open(io.BytesIO(contents)) as decoded:
+            if decoded.format != expected:
+                raise ValueError("Image type does not match file contents")
+            decoded.verify()
+    except (
+        UnidentifiedImageError,
+        OSError,
+        ValueError,
+        PILImage.DecompressionBombError,
+    ):
+        raise HTTPException(400, "Invalid or unsupported image contents.")
+    filename = Path(file.filename or "image").name
+    file_path = save_image_file(contents, ".jpg" if expected == "JPEG" else ".png")
     try:
-        file_path = save_image_file(contents, file.filename)
+        return create_image(db, filename, file_path)
     except Exception:
-        raise HTTPException(
-            status_code=500,
-            detail="Failed to save image file"
-        )
+        db.rollback()
+        Path(file_path).unlink(missing_ok=True)
+        raise HTTPException(503, "Image could not be saved. Please retry.")
 
-    image = create_image(
-        db=db,
-        filename=file.filename,
-        file_path=file_path
+
+@router.get("/stats/summary")
+def summary(db: Session = Depends(get_db)):
+    q = db.query(Analysis).filter(Analysis.status == "completed")
+    count, average = q.count(), q.with_entities(func.avg(Analysis.score)).scalar()
+    return {
+        "total_analyzed": count,
+        "active_high_risk_zones": q.filter(Analysis.risk_level == "High").count(),
+        "average_risk_score": round(average, 1) if average is not None else None,
+        "reports_generated": q.filter(Analysis.narrative.isnot(None)).count(),
+    }
+
+
+@router.get("/stats/distribution")
+def distribution(db: Session = Depends(get_db)):
+    groups = (
+        db.query(Analysis.risk_level, func.count(Analysis.id))
+        .filter(Analysis.status == "completed")
+        .group_by(Analysis.risk_level)
+        .all()
     )
+    counts = {"low": 0, "medium": 0, "high": 0}
+    counts.update({level.lower(): count for level, count in groups if level})
+    return {**counts, "total": sum(counts.values())}
 
-    return image
+
+@router.get("/reports/full", response_model=list[AnalysisResponse])
+def reports(
+    skip: int = Query(0, ge=0),
+    limit: int = Query(100, ge=1, le=500),
+    db: Session = Depends(get_db),
+):
+    return archived_reports(db)[skip : skip + limit]
+
+
+@router.get("/tasks/{task_id}", response_model=TaskResponse)
+def task_status(task_id: str, db: Session = Depends(get_db)):
+    record = db.query(Analysis).filter_by(task_id=task_id).first()
+    if not record:
+        raise HTTPException(404, "Analysis task not found.")
+    record = expire_stale(db, record)
+    return {
+        "status": record.status,
+        "details": record.failure_reason,
+        "result": serialize(record, db.get(Image, record.image_id)),
+    }
+
+
+@router.get("/", response_model=list[ImageResponse])
+def images(
+    skip: int = Query(0, ge=0),
+    limit: int = Query(100, ge=1, le=500),
+    db: Session = Depends(get_db),
+):
+    return (
+        db.query(Image)
+        .order_by(Image.uploaded_at.desc())
+        .offset(skip)
+        .limit(limit)
+        .all()
+    )
 
 
 @router.get("/{image_id}", response_model=ImageResponse)
-def get_image_metadata(
-    image_id: int,
-    db: Session = Depends(get_db)
-):
-    image = get_image_by_id(db, image_id)
-
-    if not image:
-        raise HTTPException(status_code=404, detail="Image not found")
-
-    return image
+def metadata(image_id: int, db: Session = Depends(get_db)):
+    return require_image(db, image_id)
 
 
 @router.get("/{image_id}/file")
-def get_image_file(
-    image_id: int,
-    db: Session = Depends(get_db)
-):
-    image = get_image_by_id(db, image_id)
-
-    if not image:
-        raise HTTPException(status_code=404, detail="Image not found")
-
-    file_path = Path(image.file_path)
-
-    if not file_path.exists():
-        raise HTTPException(status_code=404, detail="Image file missing on disk")
-
-    return FileResponse(
-        path=file_path,
-        media_type="application/octet-stream",
-        filename=image.filename
-    )
+def image_file(image_id: int, db: Session = Depends(get_db)):
+    image = require_image(db, image_id)
+    if not Path(image.file_path).is_file():
+        raise HTTPException(404, "Image file is unavailable.")
+    return FileResponse(image.file_path, filename=image.filename)
 
 
 @router.get("/{image_id}/similar")
-def similar_images(
-    image_id: int,
-    limit: int = 5,
-    db: Session = Depends(get_db)
+def similar(
+    image_id: int, limit: int = Query(5, ge=1, le=100), db: Session = Depends(get_db)
 ):
-    if limit <= 0:
-        raise HTTPException(status_code=400, detail="Limit must be positive")
-
-    image = get_image_by_id(db, image_id)
-
-    if not image or image.embedding is None:
-        raise HTTPException(status_code=404, detail="Image or embedding not found")
-
-    results = find_similar_images(db, image.embedding, limit)
-
+    image = require_image(db, image_id)
+    if image.embedding is None:
+        raise HTTPException(404, "No embedding is available for this image.")
     return [
-        {
-            "id": r.id,
-            "filename": r.filename,
-            "similarity": float(r.similarity)
-        }
-        for r in results
+        {"id": r.id, "filename": r.filename, "similarity": float(r.similarity)}
+        for r in find_similar_images(db, image.embedding, limit)
     ]
 
-@router.get("/{image_id}/analyze", response_model=RiskAssessmentResponse)
-def analyze_image_risk(
-    image_id: int,
-    db: Session = Depends(get_db)
-):
-    image = get_image_by_id(db, image_id)
-    
-    if not image:
-        raise HTTPException(status_code=404, detail="Image not found")
-        
-    file_path = Path(image.file_path)
-    
-    if not file_path.exists():
-        raise HTTPException(status_code=404, detail="Image file missing on disk")
-        
+
+@router.post("/{image_id}/analyze-async", response_model=AnalysisSubmission)
+def analyze_async(image_id: int, db: Session = Depends(get_db)):
+    image = require_image(db, image_id)
+    if not Path(image.file_path).is_file():
+        raise HTTPException(404, "Image file is unavailable.")
+    record, fresh = reserve(db, image_id)
+    if fresh:
+        try:
+            from app.services.tasks import analyze_image_task
+
+            analyze_image_task.apply_async(args=[record.id], task_id=record.task_id)
+        except Exception:
+            record.status, record.failure_reason = (
+                "failed",
+                "Processing queue is unavailable. Please retry.",
+            )
+            db.commit()
+            raise HTTPException(503, record.failure_reason)
+    return {"task_id": record.task_id, "status": record.status}
+
+
+@router.get("/{image_id}/analyze", response_model=AnalysisResponse)
+def analyze_sync(image_id: int, db: Session = Depends(get_db)):
+    image = require_image(db, image_id)
+    if not Path(image.file_path).is_file():
+        raise HTTPException(404, "Image file is unavailable.")
+    record, fresh = reserve(db, image_id)
+    if not fresh:
+        return serialize(record, image)
     try:
-        risk_info = ensemble_predict(str(file_path))
-    except Exception as e:
+        return execute_analysis(db, record.id, record.task_id)
+    except Exception:
         raise HTTPException(
-            status_code=500, 
-            detail=f"ML Pipeline failed: {str(e)}"
+            503,
+            "Analysis could not complete. See task status for the recorded failure.",
         )
-
-    # Save the risk score to the database so KPI stats stay accurate
-    try:
-        save_risk_score(db, image_id, risk_info.get('risk_level', 'Low'))
-    except Exception as score_error:
-        # Non-fatal — log it but don't fail the whole request
-        print(f'[Warning] Could not save risk score: {score_error}')
-
-    return risk_info
-
-@router.post("/{image_id}/analyze-async")
-def trigger_async_analysis(
-    image_id: int,
-    db: Session = Depends(get_db)
-):
-    image = get_image_by_id(db, image_id)
-    
-    if not image:
-        raise HTTPException(status_code=404, detail="Image not found")
-        
-    file_path = Path(image.file_path)
-    
-    if not file_path.exists():
-        raise HTTPException(status_code=404, detail="Image file missing on disk")
-    
-    # Pass image_id and filename so the task can include them
-    # in the real-time socket.io event it emits on completion
-    task = analyze_image_task.delay(
-        str(file_path),
-        image_id,
-        image.filename
-    )
-    
-    return {"task_id": task.id, "status": "Processing in background"}
-
-@router.get("/tasks/{task_id}")
-def get_task_status(task_id: str, db: Session = Depends(get_db)):
-    task_result = AsyncResult(task_id, app=celery_app)
-
-    if task_result.state == 'PENDING':
-        return {"status": "Pending", "details": "Task is waiting in queue"}
-
-    elif task_result.state == 'SUCCESS':
-        result = task_result.result
-
-        # Enrich the result with the actual score from the database.
-        # The Celery task saves a varied score based on model agreement,
-        # which is more accurate than the flat mapping used previously.
-        # We look it up here so the Upload page shows the real score.
-        if result and isinstance(result, dict):
-            image_id = result.get('image_id')
-            if image_id:
-                risk_score_record = db.query(RiskScore).filter(
-                    RiskScore.image_id == image_id
-                ).first()
-                if risk_score_record:
-                    result['actual_score'] = risk_score_record.score
-
-        return {"status": "Completed", "result": result}
-
-    elif task_result.state == 'FAILURE':
-        return {"status": "Failed", "details": str(task_result.info)}
-
-    else:
-        return {"status": task_result.state}
-
-from sqlalchemy import func as sql_func
-
-@router.get("/stats/summary")
-def get_stats_summary(db: Session = Depends(get_db)):
-    """
-    Returns aggregate statistics for the dashboard KPI cards.
-    This is a single endpoint that the frontend calls once on load
-    rather than making four separate counting queries.
-    """
-    # Total number of images uploaded and analyzed
-    total_images = db.query(sql_func.count(Image.id)).scalar() or 0
-    
-    # We derive risk counts from the risk_scores table.
-    # A score above 65 is considered high risk, 35-65 medium, below 35 low.
-    # This mirrors the thresholds used in our risk_mapper.py
-    high_risk_count = db.query(
-        sql_func.count(RiskScore.id)
-    ).filter(RiskScore.score >= 65).scalar() or 0
-    
-    avg_score = db.query(
-        sql_func.avg(RiskScore.score)
-    ).scalar()
-    
-    total_reports = db.query(
-        sql_func.count(RiskScore.id)
-    ).scalar() or 0
-
-    return {
-        "total_analyzed":        total_images,
-        "active_high_risk_zones": high_risk_count,
-        "average_risk_score":    round(float(avg_score), 1) if avg_score else 0,
-        "reports_generated":     total_reports,
-    }
-
-@router.get("/", response_model=List[ImageResponse])
-def list_images(
-    skip: int = 0,
-    limit: int = 100,
-    db: Session = Depends(get_db)
-):
-    """
-    Returns a paginated list of all uploaded images.
-    Used by the Reports Archive page to show past analyses.
-    """
-    images = db.query(Image).order_by(
-        Image.uploaded_at.desc()
-    ).offset(skip).limit(limit).all()
-    return images
-
-@router.get("/stats/distribution")
-def get_risk_distribution(db: Session = Depends(get_db)):
-    """
-    Returns the count of images in each risk level bucket.
-    Low  = score < 35
-    Medium = score 35-64
-    High = score >= 65
-    These thresholds match the frontend's color system:
-    green (low), amber (medium), red (high).
-    """
-    low_count = db.query(
-        sql_func.count(RiskScore.id)
-    ).filter(RiskScore.score < 35).scalar() or 0
-
-    medium_count = db.query(
-        sql_func.count(RiskScore.id)
-    ).filter(
-        RiskScore.score >= 35,
-        RiskScore.score < 65
-    ).scalar() or 0
-
-    high_count = db.query(
-        sql_func.count(RiskScore.id)
-    ).filter(RiskScore.score >= 65).scalar() or 0
-
-    total = low_count + medium_count + high_count
-
-    # If no data exists yet, return equal distribution as placeholder
-    # so the chart never shows a blank/broken state
-    if total == 0:
-        return {
-            "low":    0,
-            "medium": 0,
-            "high":   0,
-            "total":  0,
-        }
-
-    return {
-        "low":    low_count,
-        "medium": medium_count,
-        "high":   high_count,
-        "total":  total,
-    }
-
-@router.get("/reports/full")
-def get_full_reports(
-    skip: int = 0,
-    limit: int = 100,
-    db: Session = Depends(get_db)
-):
-    """
-    Returns images joined with their actual risk analysis results.
-    This is what the Reports Archive page uses to show real data
-    instead of mock risk information.
-    """
-    results = db.query(
-        Image.id,
-        Image.filename,
-        Image.uploaded_at,
-        RiskScore.score,
-        RiskScore.risk_level,
-        RiskScore.risk_type,
-        RiskScore.land_class,
-    ).outerjoin(
-        RiskScore,
-        Image.id == RiskScore.image_id
-    ).order_by(
-        Image.uploaded_at.desc()
-    ).offset(skip).limit(limit).all()
-
-    return [
-        {
-            "id":          r.id,
-            "filename":    r.filename,
-            "uploaded_at": r.uploaded_at,
-            "score":       r.score,
-            "risk_level":  r.risk_level or 'Unknown',
-            "risk_type":   r.risk_type  or 'Unknown',
-            "land_class":  r.land_class or 'Unknown',
-        }
-        for r in results
-    ]

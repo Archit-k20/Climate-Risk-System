@@ -1,0 +1,11 @@
+.git
+**/node_modules
+**/__pycache__
+**/.venv
+frontend
+ml/data
+ml/archive_demo
+ml/models
+backend/uploads
+.env
+**/.env

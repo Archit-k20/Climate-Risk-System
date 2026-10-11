@@ -1,28 +1,73 @@
-version: "3.9"
-
+name: climate-risk
+x-backend: &backend
+  build: .
+  image: climate-risk-backend:local
+  environment: &environment
+    DATABASE_URL: postgresql://climate_user:climate_pass@postgres:5432/climate_ai
+    REDIS_URL: redis://redis:6379/0
+    UPLOAD_DIR: /app/uploads
+    MODEL_DIR: /app/ml/models
+    CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3000,http://localhost:5173}
+    GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+    GEMINI_MODEL: ${GEMINI_MODEL:-}
+  volumes:
+    - uploads:/app/uploads
+    - ./ml/models:/app/ml/models:ro
+  depends_on:
+    postgres:
+      condition: service_healthy
+    redis:
+      condition: service_healthy
 services:
   postgres:
     image: pgvector/pgvector:pg15
-    container_name: climate_pgvector
-    restart: unless-stopped
     environment:
       POSTGRES_USER: climate_user
       POSTGRES_PASSWORD: climate_pass
       POSTGRES_DB: climate_ai
-    ports:
-      - "5433:5432"
-    volumes:
-      - pgdata:/var/lib/postgresql/data
-
+    ports: ["127.0.0.1:5433:5432"]
+    volumes: ["pgdata:/var/lib/postgresql/data"]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U climate_user -d climate_ai"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
   redis:
-    image: redis:7
-    container_name: climate_redis
-    restart: unless-stopped
-    ports:
-      - "6379:6379"
-    volumes:
-      - redisdata:/data
-
+    image: redis:7-alpine
+    ports: ["127.0.0.1:6379:6379"]
+    volumes: ["redisdata:/data"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+  migrate:
+    <<: *backend
+    command: ["alembic", "-c", "backend/alembic.ini", "upgrade", "head"]
+  api:
+    <<: *backend
+    ports: ["127.0.0.1:${API_PORT:-8000}:8000"]
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+  worker:
+    <<: *backend
+    command: ["celery", "-A", "app.core.celery_app", "worker", "--loglevel=info", "--concurrency=1"]
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+  test:
+    <<: *backend
+    profiles: ["test"]
+    environment:
+      <<: *environment
+      TEST_DATABASE_URL: postgresql://climate_user:climate_pass@postgres:5432/climate_test
+    command: ["pytest", "-q", "backend/tests"]
 volumes:
   pgdata:
   redisdata:
+  uploads:

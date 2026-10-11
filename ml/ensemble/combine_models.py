@@ -1,157 +1,144 @@
-import torch
-import joblib
-import numpy as np
-import random
-import os
+"""Validated, deterministic land-cover inference. No simulated predictions."""
+
+from collections import Counter
+from functools import lru_cache
 from pathlib import Path
+import hashlib
+import json
+import os
 
-from transformers import ViTForImageClassification
-from torchvision import transforms
-from PIL import Image
-from ml.risk.risk_engine import get_risk_assessment
+MODEL_DIR = Path(
+    os.getenv("MODEL_DIR", str(Path(__file__).resolve().parents[1] / "models"))
+)
+REQUIRED = (
+    "xgboost_eurosat.pkl",
+    "label_encoder.pkl",
+    "resnet_eurosat.pth",
+    "vit_eurosat.pth",
+)
+PREPROCESSING = "eurosat-rgb224-imagenet-xgb64-canny-glcm-v1"
 
 
-ML_DIR = Path(__file__).resolve().parent.parent
+class ModelUnavailable(RuntimeError):
+    pass
 
 
-XGB_MODEL_PATH = ML_DIR / "models" / "xgboost_eurosat.pkl"
-LABEL_ENCODER_PATH = ML_DIR / "models" / "label_encoder.pkl"
-RESNET_MODEL_PATH = ML_DIR / "models" / "resnet_eurosat.pth"
-VIT_MODEL_PATH = ML_DIR / "models" / "vit_eurosat.pth"
+def validate_artifacts(directory=MODEL_DIR):
+    manifest_path = directory / "manifest.json"
+    if not manifest_path.is_file():
+        raise ModelUnavailable(
+            "Verified model metadata is missing. Follow docs/model-artifacts.md; predictions are disabled."
+        )
+    manifest = json.loads(manifest_path.read_text())
+    if manifest.get("preprocessing") != PREPROCESSING or not manifest.get(
+        "training_metadata_verified"
+    ):
+        raise ModelUnavailable(
+            "Model preprocessing compatibility has not been verified."
+        )
+    labels = manifest.get("labels")
+    if not isinstance(labels, list) or len(labels) != 10 or len(set(labels)) != 10:
+        raise ModelUnavailable("Model label metadata is invalid.")
+    for name in REQUIRED:
+        path = directory / name
+        if not path.is_file() or path.stat().st_size < 256:
+            raise ModelUnavailable(
+                f"Missing model binary: {name}. Retrieve Git LFS objects."
+            )
+        digest = hashlib.sha256(path.read_bytes()).hexdigest()
+        if manifest.get("sha256", {}).get(name) != digest:
+            raise ModelUnavailable(f"Model checksum mismatch: {name}")
+    return manifest
 
-IMAGE_SIZE_RESNET = 224
-IMAGE_SIZE_VIT = 224
 
-# ---------- Load Models ----------
-models_loaded = False
-try:
-    print("Loading XGBoost model...")
-    # This will fail with KeyError: 118 if the file is a Git LFS text pointer
-    # instead of the actual pickled binary model.
-    xgb_model = joblib.load(XGB_MODEL_PATH)
-    
-    print("Loading label encoder...")
-    label_encoder = joblib.load(LABEL_ENCODER_PATH)
-    
-    from torchvision import models
-    import torch.nn as nn
-    
-    print("Loading ResNet model...")
-    resnet = models.resnet18()
-    num_features = resnet.fc.in_features
-    resnet.fc = nn.Linear(num_features, len(label_encoder.classes_))
-    resnet.load_state_dict(torch.load(RESNET_MODEL_PATH, map_location="cpu"))
-    resnet.eval()
-    
-    print("Loading ViT model...")
-    vit = ViTForImageClassification.from_pretrained(
-        "google/vit-base-patch16-224",
-        num_labels=len(label_encoder.classes_),
-        ignore_mismatched_sizes=True
-    )
-    vit.load_state_dict(torch.load(VIT_MODEL_PATH, map_location="cpu"))
-    vit.eval()
-    
-    models_loaded = True
-except Exception as e:
-    print(f"\n[WARNING] ML Models failed to load ({e}).")
-    print("Falling back to simulated predictions instead of crashing.")
-    models_loaded = False
+@lru_cache(maxsize=1)
+def load_models():
+    try:
+        metadata = validate_artifacts()
+        import torch
+        import joblib
+        from torchvision import models
+        from transformers import ViTConfig, ViTForImageClassification
+        from ml.datasets.eurosat_dataset import inference_transform
 
-# ---------- Image Transform ----------
+        encoder = joblib.load(MODEL_DIR / "label_encoder.pkl")
+        if list(encoder.classes_) != metadata["labels"]:
+            raise ModelUnavailable("Encoder labels do not match model metadata.")
+        xgb = joblib.load(MODEL_DIR / "xgboost_eurosat.pkl")
+        if xgb.n_features_in_ != 7:
+            raise ModelUnavailable("XGBoost feature count is incompatible.")
+        resnet = models.resnet18(weights=None)
+        resnet.fc = torch.nn.Linear(resnet.fc.in_features, len(encoder.classes_))
+        resnet.load_state_dict(
+            torch.load(
+                MODEL_DIR / "resnet_eurosat.pth", map_location="cpu", weights_only=True
+            )
+        )
+        vit = ViTForImageClassification(ViTConfig(num_labels=len(encoder.classes_)))
+        vit.load_state_dict(
+            torch.load(
+                MODEL_DIR / "vit_eurosat.pth", map_location="cpu", weights_only=True
+            )
+        )
+        resnet.eval()
+        vit.eval()
+        return xgb, encoder, resnet, vit, inference_transform(), metadata
+    except ModelUnavailable:
+        raise
+    except Exception as exc:
+        raise ModelUnavailable(
+            f"Model loading failed ({type(exc).__name__}); predictions are disabled."
+        ) from exc
 
-transform = transforms.Compose([
-    transforms.Resize((224, 224)),
-    transforms.ToTensor(),
-])
 
-# ---------- Feature Extraction ----------
+def resolve_votes(votes):
+    if len(votes) != 3:
+        raise ValueError("All three model predictions are required")
+    winner, count = Counter(votes.values()).most_common(1)[0]
+    if count < 2:
+        return {
+            "status": "inconclusive",
+            "model_votes": votes,
+            "model_agreement": count,
+            "description": "The three models disagree. No risk classification or index was assigned.",
+        }
+    from ml.risk.risk_engine import get_risk_assessment
 
-def extract_features(image):
-    img = np.array(image)
-    red_mean = img[:, :, 0].mean()
-    green_mean = img[:, :, 1].mean()
-    blue_mean = img[:, :, 2].mean()
-    edge_density = np.mean(np.abs(np.gradient(img[:, :, 0])))
-    texture_contrast = np.std(img)
-    texture_homogeneity = np.mean(img)
-    texture_energy = np.sum(img ** 2) / img.size
+    result = get_risk_assessment(winner)
+    if result.get("risk_level") not in {"Low", "Medium", "High"}:
+        raise ModelUnavailable("Unrecognized land-cover label")
+    return {
+        **result,
+        "status": "completed",
+        "model_votes": votes,
+        "model_agreement": count,
+    }
 
-    return np.array([
-        red_mean, green_mean, blue_mean, edge_density, 
-        texture_contrast, texture_homogeneity, texture_energy
-    ]).reshape(1, -1)
-
-# ---------- Individual Predictions ----------
-
-def predict_xgboost(image):
-    if not models_loaded: return random.choice(["Forest", "River", "Highway", "Industrial"])
-    features = extract_features(image)
-    pred = xgb_model.predict(features)
-    return label_encoder.inverse_transform(pred)[0]
-
-def predict_resnet(image):
-    if not models_loaded: return random.choice(["Forest", "River", "Highway", "Industrial"])
-    img = transform(image).unsqueeze(0)
-    with torch.no_grad():
-        outputs = resnet(img)
-    pred = torch.argmax(outputs, dim=1).item()
-    return label_encoder.classes_[pred]
-
-def predict_vit(image):
-    if not models_loaded: return random.choice(["Forest", "River", "Highway", "Industrial"])
-    img = transform(image).unsqueeze(0)
-    with torch.no_grad():
-        outputs = vit(pixel_values=img)
-    pred = torch.argmax(outputs.logits, dim=1).item()
-    return label_encoder.classes_[pred]
-
-# ---------- Ensemble Voting ----------
 
 def ensemble_predict(image_path):
-    image = Image.open(image_path).convert("RGB")
+    import torch
+    from PIL import Image
+    from ml.features.extract_features import extract_features
 
-    pred_xgb    = predict_xgboost(image)
-    pred_resnet = predict_resnet(image)
-    pred_vit    = predict_vit(image)
+    xgb, encoder, resnet, vit, transform, metadata = load_models()
+    with Image.open(image_path) as source:
+        image = source.convert("RGB")
+    import numpy as np
 
-    print("XGBoost prediction:", pred_xgb)
-    print("ResNet prediction:",  pred_resnet)
-    print("ViT prediction:",     pred_vit)
-
-    votes          = [pred_xgb, pred_resnet, pred_vit]
-    final_prediction = max(set(votes), key=votes.count)
-
-    # Count how many models agreed on the final prediction
-    agreement_count = votes.count(final_prediction)
-
-    # agreement_count = 3 means unanimous (high confidence)
-    # agreement_count = 2 means majority (medium confidence)
-    # agreement_count = 1 is impossible with 3 models + majority voting
-    confidence = 'unanimous' if agreement_count == 3 else 'majority'
-
-    print("\nFinal Ensemble Prediction:", final_prediction)
-    print("Model agreement:", agreement_count, "/3")
-
-    risk_info = get_risk_assessment(final_prediction)
-
-    # Add confidence info to the result so the task can use it
-    risk_info['model_agreement'] = agreement_count
-    risk_info['confidence']      = confidence
-
-    print("\nClimate Risk Assessment")
-    print("Land Class:",  risk_info["land_class"])
-    print("Risk Level:",  risk_info["risk_level"])
-    print("Risk Type:",   risk_info["risk_type"])
-    print("Agreement:",   f"{agreement_count}/3 models")
-    print("Explanation:", risk_info["description"])
-
-    return risk_info
-
-# ---------- Test Run ----------
-
-if __name__ == "__main__":
-    for i in range(8):
-        count = random.choice(range(1, 100))
-        test_image = f"ml/data/raw/eurosat/EuroSAT/River/River_{count}.jpg"
-        ensemble_predict(test_image)
+    xgb_label = str(
+        encoder.inverse_transform(
+            xgb.predict(np.asarray(extract_features(image_path)).reshape(1, -1))
+        )[0]
+    )
+    tensor = transform(image).unsqueeze(0)
+    with torch.inference_mode():
+        resnet_label = str(encoder.classes_[resnet(tensor).argmax(1).item()])
+        vit_label = str(
+            encoder.classes_[vit(pixel_values=tensor).logits.argmax(1).item()]
+        )
+    return {
+        **resolve_votes(
+            {"xgboost": xgb_label, "resnet": resnet_label, "vit": vit_label}
+        ),
+        "model_version": metadata.get("version", PREPROCESSING),
+    }
